@@ -4,7 +4,7 @@ TablesPro is a self-hosted, open-source relational table application for collabo
 
 ## Project Structure
 
-This is a monorepo using pnpm workspaces:
+This repo is split into two independent pnpm projects:
 
 - `backend/apps/api` — Fastify REST API with Better Auth
 - `backend/apps/worker` — Background job processor
@@ -23,7 +23,8 @@ This is a monorepo using pnpm workspaces:
 ## Initial Setup
 
 ```sh
-corepack pnpm install
+corepack pnpm -C backend install
+corepack pnpm -C frontend install
 cp .env.example .env
 ```
 

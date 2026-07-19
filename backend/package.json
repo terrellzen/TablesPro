@@ -1,0 +1,40 @@
+{
+  "name": "tablespro-backend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm run build:packages && tsx watch apps/api/src/server.ts",
+    "worker:dev": "npm run build:packages && tsx watch apps/worker/src/worker.ts",
+    "build:packages": "tsc -p packages/contracts/tsconfig.json && tsc -p packages/permissions/tsconfig.json && tsc -p packages/config/tsconfig.json && tsc -p packages/testing/tsconfig.json && tsc -p packages/database/tsconfig.json",
+    "build": "npm run build:packages && tsc -p apps/api/tsconfig.json && tsc -p apps/worker/tsconfig.json",
+    "typecheck": "tsc -p packages/contracts/tsconfig.json --noEmit && tsc -p packages/permissions/tsconfig.json --noEmit && tsc -p packages/config/tsconfig.json --noEmit && tsc -p packages/testing/tsconfig.json --noEmit && tsc -p packages/database/tsconfig.json --noEmit && tsc -p apps/api/tsconfig.json --noEmit && tsc -p apps/worker/tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "migrate": "npm run build:packages && node packages/database/dist/packages/database/src/migrate.js",
+    "dev:seed": "npm run build:packages && node packages/database/dist/packages/database/src/dev-seed.js",
+    "dev:create-export-job": "npm run build:packages && node packages/database/dist/packages/database/src/dev-create-export-job.js",
+    "integration:check": "npm run build:packages && node packages/database/dist/packages/database/src/integration-check.js",
+    "perf:seed": "npm run build:packages && node packages/database/dist/packages/database/src/perf-seed.js",
+    "perf:api": "npm run build:packages && node packages/database/dist/packages/database/src/perf-api.js",
+    "perf:queries": "npm run build:packages && node packages/database/dist/packages/database/src/perf-queries.js",
+    "perf:grid": "npm run build:packages && node packages/database/dist/packages/database/src/perf-grid.js",
+    "perf:report": "npm run build:packages && node packages/database/dist/packages/database/src/perf-report.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.2",
+    "@tablespro/contracts": "link:packages/contracts",
+    "@tablespro/database": "link:packages/database",
+    "@tablespro/permissions": "link:packages/permissions",
+    "better-auth": "^1.6.23",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.1",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "@types/pg": "^8.11.11",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}

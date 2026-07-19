@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
 import { registerAuthRoutes } from "./auth/fastify-auth-handler.js";
-import { requireSession } from "./auth/session.js";
+import { getSession } from "./auth/session.js";
 import { registerApiRoutes } from "./domains/register-routes.js";
 import { env } from "./env.js";
 import { pool } from "./db/pool.js";
@@ -54,7 +54,11 @@ app.get("/api/config", async () => ({
 }));
 
 app.get("/api/me", async (request) => {
-  return requireSession(request);
+  const session = await getSession(request);
+  return {
+    authenticated: Boolean(session),
+    ...(session ? session : {})
+  };
 });
 
 await app.listen({

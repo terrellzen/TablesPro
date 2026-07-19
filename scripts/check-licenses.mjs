@@ -23,8 +23,12 @@ const deniedFragments = [
   "Proprietary"
 ];
 
-const activePackages = readActivePackages("pnpm-lock.yaml");
-const packageFiles = collectPackageFiles("node_modules/.pnpm", activePackages);
+const projectRoots = process.argv.slice(2);
+const roots = projectRoots.length > 0 ? projectRoots : ["backend", "frontend"];
+const packageFiles = roots.flatMap((root) => {
+  const activePackages = readActivePackages(join(root, "pnpm-lock.yaml"));
+  return collectPackageFiles(join(root, "node_modules/.pnpm"), activePackages);
+});
 const violations = [];
 
 for (const file of packageFiles) {
