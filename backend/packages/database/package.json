@@ -1,0 +1,37 @@
+{
+  "name": "@tablespro/database",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/packages/database/src/index.js",
+  "types": "./dist/packages/database/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/packages/database/src/index.d.ts",
+      "import": "./dist/packages/database/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "migrate": "node dist/packages/database/src/migrate.js",
+    "dev:seed": "node dist/packages/database/src/dev-seed.js",
+    "dev:create-export-job": "node dist/packages/database/src/dev-create-export-job.js",
+    "integration:check": "node dist/packages/database/src/integration-check.js",
+    "perf:seed": "node dist/packages/database/src/perf-seed.js",
+    "perf:api": "node dist/packages/database/src/perf-api.js",
+    "perf:queries": "node dist/packages/database/src/perf-queries.js",
+    "perf:grid": "node dist/packages/database/src/perf-grid.js",
+    "perf:report": "node dist/packages/database/src/perf-report.js"
+  },
+  "dependencies": {
+    "@tablespro/contracts": "workspace:*",
+    "dotenv": "^16.4.7",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.11",
+    "vitest": "^3.0.5"
+  }
+}

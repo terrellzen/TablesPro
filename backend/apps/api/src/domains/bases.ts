@@ -1,0 +1,78 @@
+import type { FastifyInstance } from "fastify";
+import { pool } from "../db/pool.js";
+import { authorizeBase, authorizeWorkspace, requireActor } from "./authz.js";
+import { writeAuditEvent } from "./audit.js";
+import { mapError, readBodyObject, readRequiredString, readUuidParam, sendCreated, sendOk } from "./http.js";
+
+export function registerBaseRoutes(app: FastifyInstance<any, any, any, any, any>): void {
+  app.get("/api/workspaces/:workspaceId/bases", async (request, reply) => {
+    try {
+      const actor = await requireActor(request);
+      const workspaceId = readUuidParam(request.params, "workspaceId");
+      await authorizeWorkspace(actor, workspaceId, { resource: "base", action: "read" });
+      const result = await pool.query(
+        `
+          SELECT base_id, workspace_id, name, created_at, updated_at, row_version
+          FROM app.bases
+          WHERE workspace_id = $1
+          ORDER BY updated_at DESC, base_id DESC
+        `,
+        [workspaceId]
+      );
+      return sendOk(result.rows);
+    } catch (error) {
+      return mapError(request, reply, error);
+    }
+  });
+
+  app.post("/api/workspaces/:workspaceId/bases", async (request, reply) => {
+    try {
+      const actor = await requireActor(request);
+      const workspaceId = readUuidParam(request.params, "workspaceId");
+      await authorizeWorkspace(actor, workspaceId, { resource: "base", action: "create" });
+      const body = readBodyObject(request);
+      const name = readRequiredString(body, "name");
+      const result = await pool.query(
+        `
+          INSERT INTO app.bases (workspace_id, name, created_by, updated_by)
+          VALUES ($1, $2, $3, $3)
+          RETURNING base_id, workspace_id, name, created_at, updated_at, row_version
+        `,
+        [workspaceId, name, actor.userId]
+      );
+      const base = result.rows[0];
+      await writeAuditEvent({
+        workspaceId,
+        actorUserId: actor.userId,
+        action: "base.create",
+        entityType: "base",
+        entityId: base.base_id,
+        requestId: request.id,
+        outcome: "success",
+        metadata: { name }
+      });
+      return sendCreated(reply, base);
+    } catch (error) {
+      return mapError(request, reply, error);
+    }
+  });
+
+  app.get("/api/bases/:baseId", async (request, reply) => {
+    try {
+      const actor = await requireActor(request);
+      const baseId = readUuidParam(request.params, "baseId");
+      await authorizeBase(actor, baseId, { resource: "base", action: "read" });
+      const result = await pool.query(
+        `
+          SELECT base_id, workspace_id, name, created_at, updated_at, row_version
+          FROM app.bases
+          WHERE base_id = $1
+        `,
+        [baseId]
+      );
+      return sendOk(result.rows[0]);
+    } catch (error) {
+      return mapError(request, reply, error);
+    }
+  });
+}

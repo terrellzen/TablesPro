@@ -1,0 +1,12 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../..",
+    "outDir": "dist",
+    "paths": {
+      "@tablespro/database": ["../../packages/database/src/index.ts"],
+      "@tablespro/contracts": ["../../packages/contracts/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "../../packages/database/src/**/*.ts", "../../packages/contracts/src/**/*.ts"]
+}
