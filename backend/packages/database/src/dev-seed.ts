@@ -30,8 +30,17 @@ try {
 
   await client.query(
     `
+      INSERT INTO app.user_profiles (user_id, handle, display_name, can_create_workspaces, can_manage_users)
+      VALUES ($1, $1, $1, true, true)
+      ON CONFLICT (user_id) DO NOTHING
+    `,
+    [userId]
+  );
+
+  await client.query(
+    `
       INSERT INTO app.workspace_members (workspace_id, user_id, role, created_by, updated_by)
-      VALUES ($1, $2, 'owner', $2, $2)
+      VALUES ($1, $2, 'admin', $2, $2)
     `,
     [workspaceId, userId]
   );

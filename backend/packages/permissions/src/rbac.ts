@@ -1,10 +1,9 @@
-export const workspaceRoles = ["owner", "admin", "editor", "commenter", "viewer"] as const;
+export const workspaceRoles = ["admin", "editor", "viewer"] as const;
 export type WorkspaceRole = (typeof workspaceRoles)[number];
 
 export const appPermissions = {
   workspace: ["read", "update", "delete"],
   member: ["read", "create", "update", "delete"],
-  invitation: ["read", "create", "cancel"],
   base: ["read", "create", "update", "delete", "share"],
   table: ["read", "create", "update", "delete", "manageSchema"],
   field: ["read", "create", "update", "delete"],
@@ -37,9 +36,6 @@ export type AuthorizationSubject = {
 };
 
 const rolePermissions = {
-  owner: [
-    "*:*"
-  ],
   admin: [
     "workspace:read",
     "workspace:update",
@@ -47,9 +43,6 @@ const rolePermissions = {
     "member:create",
     "member:update",
     "member:delete",
-    "invitation:read",
-    "invitation:create",
-    "invitation:cancel",
     "base:*",
     "table:*",
     "field:*",
@@ -60,27 +53,13 @@ const rolePermissions = {
   editor: [
     "workspace:read",
     "member:read",
-    "invitation:read",
-    "base:read",
-    "base:create",
-    "base:update",
-    "table:read",
-    "table:create",
-    "table:update",
-    "table:manageSchema",
-    "field:*",
-    "view:*",
-    "record:*"
-  ],
-  commenter: [
-    "workspace:read",
-    "member:read",
     "base:read",
     "table:read",
     "field:read",
     "view:read",
-    "record:read",
-    "record:update"
+    "view:create",
+    "view:update",
+    "record:*"
   ],
   viewer: [
     "workspace:read",

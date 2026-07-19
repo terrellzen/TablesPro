@@ -5,6 +5,7 @@ import { getSession } from "./auth/session.js";
 import { registerApiRoutes } from "./domains/register-routes.js";
 import { env } from "./env.js";
 import { pool } from "./db/pool.js";
+import { readUserProfile } from "./domains/users.js";
 
 const app = Fastify({
   bodyLimit: 2 * 1024 * 1024,
@@ -55,9 +56,11 @@ app.get("/api/config", async () => ({
 
 app.get("/api/me", async (request) => {
   const session = await getSession(request);
+  const userId = (session as { user?: { id?: string } } | null)?.user?.id;
   return {
     authenticated: Boolean(session),
-    ...(session ? session : {})
+    ...(session ? session : {}),
+    profile: userId ? await readUserProfile(userId) : null
   };
 });
 

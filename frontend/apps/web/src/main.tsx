@@ -16,7 +16,6 @@ import {
   ShieldCheck,
   Table2,
   Trash2,
-  UserPlus,
   UserRound,
   Users
 } from "lucide-react";
@@ -95,24 +94,14 @@ type AuditEvent = {
 type WorkspaceMember = {
   workspace_id: string;
   user_id: string;
+  handle: string | null;
+  display_name: string | null;
   role: WorkspaceRole;
   created_at: string;
   updated_at: string;
 };
 
-type Invitation = {
-  invitation_id: string;
-  workspace_id: string;
-  email: string;
-  role: WorkspaceRole;
-  expires_at: string;
-  accepted_at: string | null;
-  cancelled_at: string | null;
-  created_at: string;
-  developmentAcceptToken?: string;
-};
-
-type WorkspaceRole = "owner" | "admin" | "editor" | "commenter" | "viewer";
+type WorkspaceRole = "admin" | "editor" | "viewer";
 
 type PageEnvelope<T> = {
   data: T[];
@@ -133,8 +122,18 @@ type AuthUser = {
   email?: string | null;
 };
 
+type UserProfile = {
+  user_id: string;
+  handle: string;
+  display_name: string;
+  can_create_workspaces: boolean;
+  can_manage_users: boolean;
+  disabled_at: string | null;
+};
+
 type AuthEnvelope = {
   user?: AuthUser;
+  profile?: UserProfile | null;
 };
 
 type AppConfig = {
@@ -148,6 +147,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [apiServerUrl, setApiServerUrl] = useState(() => getConfiguredApiBaseUrl());
   const [signUpEnabled, setSignUpEnabled] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [bases, setBases] = useState<Base[]>([]);
   const [tables, setTables] = useState<AppTable[]>([]);
@@ -156,11 +156,13 @@ function App() {
   const [views, setViews] = useState<SavedView[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
-  const [invitations, setInvitations] = useState<Invitation[]>([]);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<WorkspaceRole>("viewer");
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [directUserId, setDirectUserId] = useState("");
   const [directRole, setDirectRole] = useState<WorkspaceRole>("viewer");
+  const [filterFieldId, setFilterFieldId] = useState("");
+  const [filterValue, setFilterValue] = useState("");
+  const [sortFieldId, setSortFieldId] = useState("");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [selectedBaseId, setSelectedBaseId] = useState<string | null>(null);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
@@ -187,8 +189,10 @@ function App() {
     try {
       const session = await api<AuthEnvelope>("/api/me");
       setCurrentUser(session.user ?? null);
+      setProfile(session.profile ?? null);
     } catch {
       setCurrentUser(null);
+      setProfile(null);
     } finally {
       setAuthChecked(true);
     }
@@ -217,15 +221,25 @@ function App() {
   }, []);
 
   const loadTableData = useCallback(async (tableId: string) => {
+    const recordParams = new URLSearchParams({ limit: "100" });
+    if (filterFieldId && filterValue) {
+      recordParams.set(
+        "filter",
+        JSON.stringify({ kind: "rule", fieldId: filterFieldId, operator: "contains", value: filterValue })
+      );
+    }
+    if (sortFieldId) {
+      recordParams.set("sort", JSON.stringify([{ fieldId: sortFieldId, direction: sortDirection }]));
+    }
     const [fieldResponse, recordResponse, viewResponse] = await Promise.all([
       api<PageEnvelope<Field>>(`/api/tables/${tableId}/fields`),
-      api<PageEnvelope<RecordRow>>(`/api/tables/${tableId}/records?limit=100`),
+      api<PageEnvelope<RecordRow>>(`/api/tables/${tableId}/records?${recordParams.toString()}`),
       api<PageEnvelope<SavedView>>(`/api/tables/${tableId}/views`)
     ]);
     setFields(fieldResponse.data);
     setRecords(recordResponse.data);
     setViews(viewResponse.data);
-  }, []);
+  }, [filterFieldId, filterValue, sortDirection, sortFieldId]);
 
   const loadAuditEvents = useCallback(async (workspaceId: string) => {
     const response = await api<PageEnvelope<AuditEvent>>(`/api/workspaces/${workspaceId}/audit-events?limit=25`);
@@ -233,12 +247,12 @@ function App() {
   }, []);
 
   const loadAdminData = useCallback(async (workspaceId: string) => {
-    const [memberResponse, invitationResponse] = await Promise.all([
+    const [memberResponse, userResponse] = await Promise.all([
       api<PageEnvelope<WorkspaceMember>>(`/api/workspaces/${workspaceId}/members`),
-      api<PageEnvelope<Invitation>>(`/api/workspaces/${workspaceId}/invitations`)
+      api<PageEnvelope<UserProfile>>("/api/users")
     ]);
     setMembers(memberResponse.data);
-    setInvitations(invitationResponse.data);
+    setUsers(userResponse.data);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -278,7 +292,7 @@ function App() {
       setBases([]);
       setAuditEvents([]);
       setMembers([]);
-      setInvitations([]);
+      setUsers([]);
       return;
     }
     Promise.all([loadBases(selectedWorkspaceId), loadAuditEvents(selectedWorkspaceId), loadAdminData(selectedWorkspaceId)]).catch((error) =>
@@ -305,6 +319,10 @@ function App() {
   }, [loadTableData, selectedTableId]);
 
   async function createWorkspace() {
+    if (!profile?.can_create_workspaces) {
+      setStatus({ tone: "danger", text: "You do not have permission to create workspaces" });
+      return;
+    }
     const name = prompt("Workspace name");
     if (!name) {
       return;
@@ -406,26 +424,6 @@ function App() {
     setStatus({ tone: "success", text: `Export queued: ${response.data.jobId}` });
   }
 
-  async function inviteMember() {
-    if (!selectedWorkspaceId || !inviteEmail.trim()) {
-      return;
-    }
-    try {
-      const response = await mutate<{ data: Invitation }>(`/api/workspaces/${selectedWorkspaceId}/invitations`, {
-        email: inviteEmail.trim(),
-        role: inviteRole
-      });
-      setInviteEmail("");
-      await Promise.all([loadAdminData(selectedWorkspaceId), loadAuditEvents(selectedWorkspaceId)]);
-      setStatus({
-        tone: "success",
-        text: response.data.developmentAcceptToken ? `Invite created. Dev token: ${response.data.developmentAcceptToken}` : "Invite created"
-      });
-    } catch (error) {
-      setStatus({ tone: "danger", text: errorMessage(error) });
-    }
-  }
-
   async function addDirectMember() {
     if (!selectedWorkspaceId || !directUserId.trim()) {
       return;
@@ -471,16 +469,27 @@ function App() {
     }
   }
 
-  async function cancelInvitation(invitation: Invitation) {
-    if (!selectedWorkspaceId) {
+  async function changeUserPermissions(user: UserProfile, patch: Partial<Pick<UserProfile, "can_create_workspaces" | "can_manage_users">>) {
+    try {
+      const response = await mutate<{ data: UserProfile }>(`/api/users/${encodeURIComponent(user.user_id)}/permissions`, {
+        canCreateWorkspaces: patch.can_create_workspaces ?? user.can_create_workspaces,
+        canManageUsers: patch.can_manage_users ?? user.can_manage_users
+      }, "PATCH");
+      setUsers((current) => current.map((entry) => (entry.user_id === user.user_id ? response.data : entry)));
+      setStatus({ tone: "success", text: "User permissions updated" });
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+    }
+  }
+
+  async function removeUser(user: UserProfile) {
+    if (!confirm(`Disable @${user.handle} and remove workspace access?`)) {
       return;
     }
     try {
-      await request(`/api/workspaces/${selectedWorkspaceId}/invitations/${invitation.invitation_id}`, {
-        method: "DELETE"
-      });
-      await Promise.all([loadAdminData(selectedWorkspaceId), loadAuditEvents(selectedWorkspaceId)]);
-      setStatus({ tone: "success", text: "Invitation cancelled" });
+      await request(`/api/users/${encodeURIComponent(user.user_id)}`, { method: "DELETE" });
+      setUsers((current) => current.filter((entry) => entry.user_id !== user.user_id));
+      setStatus({ tone: "success", text: "User disabled" });
     } catch (error) {
       setStatus({ tone: "danger", text: errorMessage(error) });
     }
@@ -531,7 +540,7 @@ function App() {
     setViews([]);
     setAuditEvents([]);
     setMembers([]);
-    setInvitations([]);
+    setUsers([]);
     setSelectedWorkspaceId(null);
     setSelectedBaseId(null);
     setSelectedTableId(null);
@@ -550,7 +559,7 @@ function App() {
     setViews([]);
     setAuditEvents([]);
     setMembers([]);
-    setInvitations([]);
+    setUsers([]);
     setSelectedWorkspaceId(null);
     setSelectedBaseId(null);
     setSelectedTableId(null);
@@ -599,7 +608,14 @@ function App() {
           </div>
         </div>
 
-        <AccountBlock user={currentUser} apiServerUrl={apiServerUrl} onApiServerChange={handleApiServerChange} onLogout={logout} />
+        <AccountBlock
+          user={currentUser}
+          profile={profile}
+          apiServerUrl={apiServerUrl}
+          onApiServerChange={handleApiServerChange}
+          onProfileChange={setProfile}
+          onLogout={logout}
+        />
 
         <button type="button" className="command-button" onClick={createWorkspace}>
           <Plus size={16} />
@@ -673,6 +689,30 @@ function App() {
             <Plus size={15} />
             Record
           </button>
+          <Selector
+            icon={<RefreshCcw size={15} />}
+            label="Filter"
+            value={filterFieldId}
+            options={visibleFields.map((field) => ({ value: field.field_id, label: field.name }))}
+            onChange={setFilterFieldId}
+          />
+          <input
+            className="toolbar-input"
+            placeholder="Contains"
+            value={filterValue}
+            onChange={(event) => setFilterValue(event.target.value)}
+          />
+          <Selector
+            icon={<RefreshCcw size={15} />}
+            label="Sort"
+            value={sortFieldId}
+            options={visibleFields.map((field) => ({ value: field.field_id, label: field.name }))}
+            onChange={setSortFieldId}
+          />
+          <select className="role-select compact-select" value={sortDirection} onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")}>
+            <option value="asc">Asc</option>
+            <option value="desc">Desc</option>
+          </select>
           <button type="button" className="small-button" onClick={createFieldGroup}>
             <Layers3 size={15} />
             Group
@@ -699,7 +739,7 @@ function App() {
             <div className="empty-state workspace-empty">
               <Database size={24} />
               <strong>No workspaces yet</strong>
-              <span>Create one to become its owner and start adding tables.</span>
+              <span>You need create permission before you can add a workspace.</span>
               <button type="button" className="small-button primary" onClick={createWorkspace}>
                 <Plus size={15} />
                 Workspace
@@ -723,22 +763,19 @@ function App() {
 
           <RightRail
             currentUser={currentUser}
+            profile={profile}
+            users={users}
             members={members}
-            invitations={invitations}
             auditEvents={auditEvents}
-            inviteEmail={inviteEmail}
-            inviteRole={inviteRole}
             directUserId={directUserId}
             directRole={directRole}
-            onInviteEmailChange={setInviteEmail}
-            onInviteRoleChange={setInviteRole}
             onDirectUserIdChange={setDirectUserId}
             onDirectRoleChange={setDirectRole}
-            onInvite={inviteMember}
             onAddDirectMember={addDirectMember}
             onChangeRole={changeMemberRole}
             onRemoveMember={removeMember}
-            onCancelInvitation={cancelInvitation}
+            onChangeUserPermissions={changeUserPermissions}
+            onRemoveUser={removeUser}
           />
         </section>
 
@@ -759,6 +796,7 @@ function AuthScreen(props: {
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
   const [serverDraft, setServerDraft] = useState(props.apiServerUrl);
   const [name, setName] = useState("");
+  const [handle, setHandle] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<Status>({ tone: "idle", text: "Use your TablesPro account" });
@@ -785,6 +823,12 @@ function AuthScreen(props: {
         password,
         ...(mode === "sign-up" ? { name: name.trim() || email.trim() } : {})
       });
+      if (mode === "sign-up") {
+        await mutate("/api/me/profile", {
+          handle: handle.trim() || name.trim() || email.trim().split("@")[0],
+          displayName: name.trim() || email.trim()
+        }, "PUT");
+      }
       await props.onAuthenticated();
     } catch (error) {
       setStatus({ tone: "danger", text: errorMessage(error) });
@@ -843,10 +887,16 @@ function AuthScreen(props: {
         </div>
 
         {mode === "sign-up" ? (
-          <label className="stacked-field">
-            <span>Name</span>
-            <input autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} />
-          </label>
+          <>
+            <label className="stacked-field">
+              <span>Name</span>
+              <input autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} />
+            </label>
+            <label className="stacked-field">
+              <span>User id</span>
+              <input autoComplete="username" value={handle} onChange={(event) => setHandle(event.target.value)} />
+            </label>
+          </>
         ) : null}
 
         <label className="stacked-field">
@@ -887,16 +937,23 @@ function AuthScreen(props: {
 
 function AccountBlock(props: {
   user: AuthUser;
+  profile: UserProfile | null;
   apiServerUrl: string;
   onApiServerChange: (url: string) => Promise<void>;
+  onProfileChange: (profile: UserProfile) => void;
   onLogout: () => Promise<void>;
 }) {
   const [serverDraft, setServerDraft] = useState(props.apiServerUrl);
+  const [handleDraft, setHandleDraft] = useState(props.profile?.handle ?? "");
   const [serverStatus, setServerStatus] = useState("");
 
   useEffect(() => {
     setServerDraft(props.apiServerUrl);
   }, [props.apiServerUrl]);
+
+  useEffect(() => {
+    setHandleDraft(props.profile?.handle ?? "");
+  }, [props.profile?.handle]);
 
   async function saveServer() {
     try {
@@ -907,18 +964,40 @@ function AccountBlock(props: {
     }
   }
 
+  async function saveProfile() {
+    try {
+      const response = await mutate<{ data: UserProfile }>("/api/me/profile", {
+        handle: handleDraft,
+        displayName: props.user.name || props.user.email || handleDraft
+      }, "PUT");
+      props.onProfileChange(response.data);
+      setServerStatus("User id updated");
+    } catch (error) {
+      setServerStatus(errorMessage(error));
+    }
+  }
+
   return (
     <div className="account-stack">
       <div className="account-block">
         <UserRound size={16} />
         <div>
-          <strong>{props.user.name || props.user.email || "Signed in"}</strong>
-          <span>{props.user.id}</span>
+          <strong>{props.profile?.handle ? `@${props.profile.handle}` : props.user.name || props.user.email || "Signed in"}</strong>
+          <span>{props.profile?.can_create_workspaces ? "Can create" : "Shared access only"}</span>
         </div>
         <button type="button" className="icon-button" onClick={() => void props.onLogout()} aria-label="Sign out">
           <LogOut size={16} />
         </button>
       </div>
+
+      <label className="stacked-field server-field">
+        <span>User id</span>
+        <input value={handleDraft} spellCheck={false} onChange={(event) => setHandleDraft(event.target.value)} />
+      </label>
+      <button type="button" className="small-button" onClick={() => void saveProfile()}>
+        <UserRound size={15} />
+        Save id
+      </button>
 
       <label className="stacked-field server-field">
         <span>API server</span>
@@ -935,22 +1014,19 @@ function AccountBlock(props: {
 
 function RightRail(props: {
   currentUser: AuthUser;
+  profile: UserProfile | null;
+  users: UserProfile[];
   members: WorkspaceMember[];
-  invitations: Invitation[];
   auditEvents: AuditEvent[];
-  inviteEmail: string;
-  inviteRole: WorkspaceRole;
   directUserId: string;
   directRole: WorkspaceRole;
-  onInviteEmailChange: (value: string) => void;
-  onInviteRoleChange: (value: WorkspaceRole) => void;
   onDirectUserIdChange: (value: string) => void;
   onDirectRoleChange: (value: WorkspaceRole) => void;
-  onInvite: () => Promise<void>;
   onAddDirectMember: () => Promise<void>;
   onChangeRole: (member: WorkspaceMember, role: WorkspaceRole) => Promise<void>;
   onRemoveMember: (member: WorkspaceMember) => Promise<void>;
-  onCancelInvitation: (invitation: Invitation) => Promise<void>;
+  onChangeUserPermissions: (user: UserProfile, patch: Partial<Pick<UserProfile, "can_create_workspaces" | "can_manage_users">>) => Promise<void>;
+  onRemoveUser: (user: UserProfile) => Promise<void>;
 }) {
   return (
     <aside className="right-rail" aria-label="Workspace administration">
@@ -962,26 +1038,12 @@ function RightRail(props: {
 
         <div className="admin-section">
           <label className="stacked-field">
-            <span>Invite email</span>
-            <input value={props.inviteEmail} onChange={(event) => props.onInviteEmailChange(event.target.value)} />
-          </label>
-          <div className="inline-form">
-            <RoleSelect value={props.inviteRole} onChange={props.onInviteRoleChange} />
-            <button type="button" className="small-button primary" onClick={() => void props.onInvite()}>
-              <UserPlus size={15} />
-              Invite
-            </button>
-          </div>
-        </div>
-
-        <div className="admin-section">
-          <label className="stacked-field">
-            <span>User id</span>
+            <span>User id or handle</span>
             <input value={props.directUserId} onChange={(event) => props.onDirectUserIdChange(event.target.value)} />
           </label>
           <div className="inline-form">
             <RoleSelect value={props.directRole} onChange={props.onDirectRoleChange} />
-            <button type="button" className="small-button" onClick={() => props.onDirectUserIdChange(props.currentUser.id)}>
+            <button type="button" className="small-button" onClick={() => props.onDirectUserIdChange(props.profile?.handle ?? props.currentUser.id)}>
               <UserRound size={15} />
               Me
             </button>
@@ -996,7 +1058,7 @@ function RightRail(props: {
           {props.members.map((member) => (
             <div className="member-row" key={member.user_id}>
               <div>
-                <strong>{member.user_id}</strong>
+                <strong>{member.handle ? `@${member.handle}` : member.user_id}</strong>
                 <span>{new Date(member.updated_at).toLocaleDateString()}</span>
               </div>
               <RoleSelect value={member.role} onChange={(role) => void props.onChangeRole(member, role)} />
@@ -1012,26 +1074,6 @@ function RightRail(props: {
           ))}
         </div>
 
-        <div className="invite-list">
-          {props.invitations.map((invitation) => (
-            <div className={`invite-row ${invitation.cancelled_at ? "muted" : ""}`} key={invitation.invitation_id}>
-              <div>
-                <strong>{invitation.email}</strong>
-                <span>{invitation.cancelled_at ? "cancelled" : invitation.accepted_at ? "accepted" : invitation.role}</span>
-              </div>
-              {!invitation.accepted_at && !invitation.cancelled_at ? (
-                <button
-                  type="button"
-                  className="icon-button"
-                  onClick={() => void props.onCancelInvitation(invitation)}
-                  aria-label={`Cancel invitation for ${invitation.email}`}
-                >
-                  <Trash2 size={15} />
-                </button>
-              ) : null}
-            </div>
-          ))}
-        </div>
       </section>
 
       <section className="audit-panel" aria-label="Audit log">
@@ -1048,6 +1090,50 @@ function RightRail(props: {
             </div>
           ))}
         </div>
+
+        <div className="admin-section">
+          <div className="panel-heading inline-heading">
+            <Users size={15} />
+            <span>Users</span>
+          </div>
+          <div className="user-list">
+            {props.users.map((user) => (
+              <div className="user-row" key={user.user_id}>
+                <div>
+                  <strong>@{user.handle}</strong>
+                  <span>{user.can_create_workspaces ? "Can create" : "Shared only"}</span>
+                </div>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={user.can_create_workspaces}
+                    disabled={!props.profile?.can_manage_users}
+                    onChange={(event) => void props.onChangeUserPermissions(user, { can_create_workspaces: event.target.checked })}
+                  />
+                  Create
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={user.can_manage_users}
+                    disabled={!props.profile?.can_manage_users}
+                    onChange={(event) => void props.onChangeUserPermissions(user, { can_manage_users: event.target.checked })}
+                  />
+                  Manage
+                </label>
+                <button
+                  type="button"
+                  className="icon-button danger"
+                  disabled={!props.profile?.can_manage_users || user.user_id === props.currentUser.id}
+                  onClick={() => void props.onRemoveUser(user)}
+                  aria-label={`Disable ${user.handle}`}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
     </aside>
   );
@@ -1056,10 +1142,8 @@ function RightRail(props: {
 function RoleSelect(props: { value: WorkspaceRole; onChange: (value: WorkspaceRole) => void }) {
   return (
     <select className="role-select" value={props.value} onChange={(event) => props.onChange(event.target.value as WorkspaceRole)}>
-      <option value="owner">Owner</option>
       <option value="admin">Admin</option>
       <option value="editor">Editor</option>
-      <option value="commenter">Commenter</option>
       <option value="viewer">Viewer</option>
     </select>
   );

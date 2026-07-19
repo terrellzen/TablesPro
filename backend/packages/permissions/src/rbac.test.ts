@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { isAllowed } from "./rbac.js";
 
 describe("RBAC permissions", () => {
-  it("allows owners to perform any application action", () => {
+  it("allows admins to manage tables", () => {
     expect(
-      isAllowed({ workspaceRole: "owner" }, { resource: "table", action: "delete" })
+      isAllowed({ workspaceRole: "admin" }, { resource: "table", action: "delete" })
     ).toBe(true);
   });
 
@@ -40,7 +40,7 @@ describe("RBAC permissions", () => {
     expect(
       isAllowed(
         {
-          workspaceRole: "owner",
+          workspaceRole: "admin",
           tableOverride: {
             allow: [{ resource: "record", action: "delete" }],
             deny: [{ resource: "record", action: "delete" }]

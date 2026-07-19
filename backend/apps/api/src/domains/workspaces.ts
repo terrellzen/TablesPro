@@ -3,6 +3,7 @@ import { pool } from "../db/pool.js";
 import { requireActor, authorizeWorkspace } from "./authz.js";
 import { mapError, readBodyObject, readRequiredString, readUuidParam, requireReturnedRow, sendCreated, sendOk } from "./http.js";
 import { writeAuditEvent } from "./audit.js";
+import { requireCanCreateWorkspaces } from "./users.js";
 
 export function registerWorkspaceRoutes(app: FastifyInstance<any, any, any, any, any>): void {
   app.get("/api/workspaces", async (request, reply) => {
@@ -28,6 +29,7 @@ export function registerWorkspaceRoutes(app: FastifyInstance<any, any, any, any,
     const client = await pool.connect();
     try {
       const actor = await requireActor(request);
+      await requireCanCreateWorkspaces(actor.userId);
       const body = readBodyObject(request);
       const name = readRequiredString(body, "name");
 
@@ -44,7 +46,7 @@ export function registerWorkspaceRoutes(app: FastifyInstance<any, any, any, any,
       await client.query(
         `
           INSERT INTO app.workspace_members (workspace_id, user_id, role, created_by, updated_by)
-          VALUES ($1, $2, 'owner', $2, $2)
+          VALUES ($1, $2, 'admin', $2, $2)
         `,
         [row.workspace_id, actor.userId]
       );

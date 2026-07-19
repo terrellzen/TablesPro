@@ -331,6 +331,22 @@ h1 {
   outline: none;
 }
 
+.toolbar-input {
+  width: 160px;
+  height: 36px;
+  min-width: 120px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 0 9px;
+}
+
+.compact-select {
+  width: 76px;
+  flex: 0 0 auto;
+}
+
 .view-tabs {
   display: flex;
   gap: 6px;
@@ -530,7 +546,8 @@ h1 {
 }
 
 .member-list,
-.invite-list {
+.invite-list,
+.user-list {
   display: grid;
 }
 
@@ -571,6 +588,42 @@ h1 {
 
 .invite-row.muted {
   opacity: 0.55;
+}
+
+.inline-heading {
+  height: auto;
+  padding: 0;
+  border-bottom: 0;
+  font-size: 13px;
+}
+
+.user-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 0;
+  border-top: 1px solid var(--color-border);
+  font-size: 12px;
+}
+
+.user-row strong,
+.user-row span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-row span {
+  color: var(--color-text-muted);
+}
+
+.user-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-muted);
 }
 
 .icon-button.danger {

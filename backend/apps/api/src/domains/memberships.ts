@@ -1,4 +1,3 @@
-import { createHash, randomBytes } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { pool } from "../db/pool.js";
 import { authorizeWorkspace, requireActor } from "./authz.js";
@@ -23,10 +22,11 @@ export function registerMembershipRoutes(app: FastifyInstance<any, any, any, any
       await authorizeWorkspace(actor, workspaceId, { resource: "member", action: "read" });
       const result = await pool.query(
         `
-          SELECT workspace_id, user_id, role, created_at, updated_at
-          FROM app.workspace_members
-          WHERE workspace_id = $1
-          ORDER BY created_at ASC, user_id ASC
+          SELECT wm.workspace_id, wm.user_id, up.handle::text, up.display_name, wm.role, wm.created_at, wm.updated_at
+          FROM app.workspace_members wm
+          LEFT JOIN app.user_profiles up ON up.user_id = wm.user_id
+          WHERE wm.workspace_id = $1
+          ORDER BY wm.created_at ASC, wm.user_id ASC
         `,
         [workspaceId]
       );
@@ -40,14 +40,10 @@ export function registerMembershipRoutes(app: FastifyInstance<any, any, any, any
     try {
       const actor = await requireActor(request);
       const workspaceId = readUuidParam(request.params, "workspaceId");
-      const subject = await authorizeWorkspace(actor, workspaceId, { resource: "member", action: "create" });
+      await authorizeWorkspace(actor, workspaceId, { resource: "member", action: "create" });
       const body = readBodyObject(request);
-      const userId = readRequiredString(body, "userId");
+      const userId = await resolveUserId(readRequiredString(body, "userId"));
       const role = readWorkspaceRole(body.role);
-
-      if (role === "owner" && subject.workspaceRole !== "owner") {
-        throw new HttpError(403, "FORBIDDEN", "Only owners can add owners");
-      }
 
       const result = await pool.query(
         `
@@ -87,9 +83,6 @@ export function registerMembershipRoutes(app: FastifyInstance<any, any, any, any
       const body = readBodyObject(request);
       const role = readWorkspaceRole(body.role);
 
-      if (role === "owner" && subject.workspaceRole !== "owner") {
-        throw new HttpError(403, "FORBIDDEN", "Only owners can assign owner role");
-      }
       if (targetUserId === actor.userId && role !== subject.workspaceRole) {
         throw new HttpError(403, "FORBIDDEN", "Members cannot change their own role");
       }
@@ -141,13 +134,13 @@ export function registerMembershipRoutes(app: FastifyInstance<any, any, any, any
         throw new HttpError(404, "NOT_FOUND", "Member was not found");
       }
 
-      if (targetRole === "owner") {
-        const owners = await pool.query<{ owner_count: number }>(
-          "SELECT count(*)::int AS owner_count FROM app.workspace_members WHERE workspace_id = $1 AND role = 'owner'",
+      if (targetRole === "admin") {
+        const admins = await pool.query<{ admin_count: number }>(
+          "SELECT count(*)::int AS admin_count FROM app.workspace_members WHERE workspace_id = $1 AND role = 'admin'",
           [workspaceId]
         );
-        if ((owners.rows[0]?.owner_count ?? 0) <= 1) {
-          throw new HttpError(403, "FORBIDDEN", "Cannot remove the last owner");
+        if ((admins.rows[0]?.admin_count ?? 0) <= 1) {
+          throw new HttpError(403, "FORBIDDEN", "Cannot remove the last admin");
         }
       }
 
@@ -173,110 +166,6 @@ export function registerMembershipRoutes(app: FastifyInstance<any, any, any, any
     }
   });
 
-  app.get("/api/workspaces/:workspaceId/invitations", async (request, reply) => {
-    try {
-      const actor = await requireActor(request);
-      const workspaceId = readUuidParam(request.params, "workspaceId");
-      await authorizeWorkspace(actor, workspaceId, { resource: "invitation", action: "read" });
-      const result = await pool.query(
-        `
-          SELECT invitation_id, workspace_id, email, role, expires_at, accepted_at, cancelled_at, created_at, created_by
-          FROM app.invitations
-          WHERE workspace_id = $1
-          ORDER BY created_at DESC, invitation_id DESC
-        `,
-        [workspaceId]
-      );
-      return sendOk(result.rows);
-    } catch (error) {
-      return mapError(request, reply, error);
-    }
-  });
-
-  app.post("/api/workspaces/:workspaceId/invitations", async (request, reply) => {
-    try {
-      const actor = await requireActor(request);
-      const workspaceId = readUuidParam(request.params, "workspaceId");
-      const subject = await authorizeWorkspace(actor, workspaceId, { resource: "invitation", action: "create" });
-      const body = readBodyObject(request);
-      const email = readRequiredString(body, "email").toLowerCase();
-      const role = readWorkspaceRole(body.role);
-      if (role === "owner" && subject.workspaceRole !== "owner") {
-        throw new HttpError(403, "FORBIDDEN", "Only owners can invite owners");
-      }
-
-      const token = randomBytes(32).toString("base64url");
-      const tokenHash = createHash("sha256").update(token).digest();
-      const result = await pool.query(
-        `
-          INSERT INTO app.invitations (workspace_id, email, role, token_hash, expires_at, created_by)
-          VALUES ($1, $2, $3, $4, now() + interval '7 days', $5)
-          RETURNING invitation_id, workspace_id, email, role, expires_at, created_at
-        `,
-        [workspaceId, email, role, tokenHash, actor.userId]
-      );
-      const invitation = requireReturnedRow(result.rows[0], "Invitation insert did not return a row");
-
-      await writeAuditEvent({
-        workspaceId,
-        actorUserId: actor.userId,
-        action: "invitation.create",
-        entityType: "invitation",
-        entityId: invitation.invitation_id,
-        requestId: request.id,
-        outcome: "success",
-        metadata: { email, role }
-      });
-
-      return sendCreated(reply, {
-        ...invitation,
-        developmentAcceptToken: process.env.NODE_ENV === "production" ? undefined : token
-      });
-    } catch (error) {
-      return mapError(request, reply, error);
-    }
-  });
-
-  app.delete("/api/workspaces/:workspaceId/invitations/:invitationId", async (request, reply) => {
-    try {
-      const actor = await requireActor(request);
-      const workspaceId = readUuidParam(request.params, "workspaceId");
-      const invitationId = readUuidParam(request.params, "invitationId");
-      await authorizeWorkspace(actor, workspaceId, { resource: "invitation", action: "cancel" });
-
-      const result = await pool.query(
-        `
-          UPDATE app.invitations
-          SET cancelled_at = now()
-          WHERE workspace_id = $1
-            AND invitation_id = $2
-            AND accepted_at IS NULL
-            AND cancelled_at IS NULL
-          RETURNING invitation_id, email, role
-        `,
-        [workspaceId, invitationId]
-      );
-      const invitation = result.rows[0];
-      if (!invitation) {
-        throw new HttpError(404, "NOT_FOUND", "Invitation was not found or already closed");
-      }
-
-      await writeAuditEvent({
-        workspaceId,
-        actorUserId: actor.userId,
-        action: "invitation.cancel",
-        entityType: "invitation",
-        entityId: invitation.invitation_id,
-        requestId: request.id,
-        outcome: "success",
-        metadata: { email: invitation.email, role: invitation.role }
-      });
-
-      return reply.status(204).send();
-    } catch (error) {
-      return mapError(request, reply, error);
-    }
-  });
 }
 
 function readWorkspaceRole(value: unknown): WorkspaceRole {
@@ -284,4 +173,22 @@ function readWorkspaceRole(value: unknown): WorkspaceRole {
     throw new HttpError(400, "VALIDATION_ERROR", "role is invalid");
   }
   return value as WorkspaceRole;
+}
+
+async function resolveUserId(value: string): Promise<string> {
+  const userKey = value.replace(/^@/, "");
+  const result = await pool.query<{ user_id: string }>(
+    `
+      SELECT user_id
+      FROM app.user_profiles
+      WHERE disabled_at IS NULL
+        AND (user_id = $1 OR handle = $1::citext)
+    `,
+    [userKey]
+  );
+  const userId = result.rows[0]?.user_id;
+  if (!userId) {
+    throw new HttpError(404, "NOT_FOUND", "User was not found. Ask them to sign in and create a user id first.");
+  }
+  return userId;
 }

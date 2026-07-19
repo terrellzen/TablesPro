@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { FilterExpression } from "@tablespro/contracts";
+import type { FilterExpression, RecordSort } from "@tablespro/contracts";
 import {
   compileFilter,
   decodeCursor,
@@ -29,6 +29,7 @@ export function registerRecordRoutes(app: FastifyInstance<any, any, any, any, an
       const cursor = readOptionalString(request.query as Record<string, unknown>, "cursor");
       const selectedFieldIds = parseSelectedFields((request.query as Record<string, unknown>).fields);
       const filter = parseFilter((request.query as Record<string, unknown>).filter);
+      const sort = parseSort((request.query as Record<string, unknown>).sort);
 
       const fields = await readFields(tableId, selectedFieldIds);
       const selectedColumns = fields.map((field) => quoteIdentifier(field.physical_column_name));
@@ -47,8 +48,9 @@ export function registerRecordRoutes(app: FastifyInstance<any, any, any, any, an
         fields.map((field) => ({ fieldId: field.field_id, fieldType: field.field_type }))
       );
       const params = [...compiledFilter.params];
-      const keysetSql = cursor ? compileCursorWhere(cursor, tableId, params) : "";
+      const keysetSql = cursor && sort.length === 0 ? compileCursorWhere(cursor, tableId, params) : "";
       params.push(limit + 1);
+      const orderSql = compileOrderBy(sort, fields);
 
       const result = await pool.query(
         `
@@ -57,7 +59,7 @@ export function registerRecordRoutes(app: FastifyInstance<any, any, any, any, an
           WHERE deleted_at IS NULL
             AND ${compiledFilter.sql}
             ${keysetSql}
-          ORDER BY updated_at DESC, record_id DESC
+          ORDER BY ${orderSql}
           LIMIT $${params.length}
         `,
         params
@@ -65,7 +67,7 @@ export function registerRecordRoutes(app: FastifyInstance<any, any, any, any, an
 
       const rows = result.rows.slice(0, limit);
       const nextCursor =
-        result.rows.length > limit && rows.length > 0
+        sort.length === 0 && result.rows.length > limit && rows.length > 0
           ? encodeCursor(
               {
                 tableId,
@@ -271,6 +273,43 @@ function parseFilter(value: unknown): FilterExpression | undefined {
     throw new HttpError(400, "VALIDATION_ERROR", "filter must be a valid filter AST");
   }
   return parsed;
+}
+
+function parseSort(value: unknown): RecordSort[] {
+  if (value === undefined || value === null || value === "") {
+    return [];
+  }
+  if (typeof value !== "string") {
+    throw new HttpError(400, "VALIDATION_ERROR", "sort must be a JSON-encoded sort list");
+  }
+  const parsed = JSON.parse(value) as RecordSort[];
+  if (!Array.isArray(parsed)) {
+    throw new HttpError(400, "VALIDATION_ERROR", "sort must be an array");
+  }
+  return parsed.map((sort) => {
+    if (!sort || typeof sort !== "object" || typeof sort.fieldId !== "string") {
+      throw new HttpError(400, "VALIDATION_ERROR", "sort fieldId is required");
+    }
+    if (sort.direction !== "asc" && sort.direction !== "desc") {
+      throw new HttpError(400, "VALIDATION_ERROR", "sort direction must be asc or desc");
+    }
+    return sort;
+  });
+}
+
+function compileOrderBy(sort: RecordSort[], fields: FieldRow[]): string {
+  if (sort.length === 0) {
+    return "updated_at DESC, record_id DESC";
+  }
+  const fieldMap = new Map(fields.map((field) => [field.field_id, field]));
+  const clauses = sort.map((entry) => {
+    const field = fieldMap.get(entry.fieldId);
+    if (!field) {
+      throw new HttpError(400, "VALIDATION_ERROR", "One or more sort fields are invalid");
+    }
+    return `${quoteIdentifier(field.physical_column_name)} ${entry.direction.toUpperCase()} NULLS LAST`;
+  });
+  return [...clauses, "record_id ASC"].join(", ");
 }
 
 function readRecordValues(body: Record<string, unknown>): Record<string, unknown> {
