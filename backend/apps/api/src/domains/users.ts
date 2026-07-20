@@ -1,4 +1,6 @@
 import type { FastifyInstance } from "fastify";
+import { fromNodeHeaders } from "better-auth/node";
+import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { pool } from "../db/pool.js";
 import { auth } from "../auth/auth.js";
 import { requireActor } from "./authz.js";
@@ -43,6 +45,14 @@ export function registerUserRoutes(app: FastifyInstance<any, any, any, any, any>
       const canCreateWorkspaces = Boolean(body.canCreateWorkspaces);
       const canManageUsers = Boolean(body.canManageUsers);
 
+      const handleTaken = await pool.query<{ user_id: string }>(
+        `SELECT user_id FROM app.user_profiles WHERE handle = $1::citext`,
+        [handle]
+      );
+      if (handleTaken.rows.length > 0) {
+        throw new HttpError(409, "CONFLICT", "This handle is already taken by another user");
+      }
+
       const result = await auth.api.signUpEmail({
         body: { name: displayName, email, password }
       });
@@ -83,17 +93,29 @@ export function registerUserRoutes(app: FastifyInstance<any, any, any, any, any>
       const body = readBodyObject(request);
       const handle = normalizeHandle(readRequiredString(body, "handle"));
       const displayName = readRequiredString(body, "displayName");
+
+      const taken = await pool.query<{ user_id: string }>(
+        `SELECT user_id FROM app.user_profiles WHERE handle = $1::citext AND user_id != $2`,
+        [handle, actor.userId]
+      );
+      if (taken.rows.length > 0) {
+        throw new HttpError(409, "CONFLICT", "This handle is already taken by another user");
+      }
+
+      const existing = await pool.query<{ count: string }>("SELECT count(*)::text AS count FROM app.user_profiles");
+      const isFirstUser = Number(existing.rows[0]?.count ?? "0") === 0;
+
       const result = await pool.query<UserProfile>(
         `
-          INSERT INTO app.user_profiles (user_id, handle, display_name)
-          VALUES ($1, $2, $3)
+          INSERT INTO app.user_profiles (user_id, handle, display_name, can_create_workspaces, can_manage_users)
+          VALUES ($1, $2, $3, $4, $5)
           ON CONFLICT (user_id) DO UPDATE
           SET handle = EXCLUDED.handle,
               display_name = EXCLUDED.display_name,
               updated_at = now()
           RETURNING user_id, handle::text, display_name, can_create_workspaces, can_manage_users, disabled_at
         `,
-        [actor.userId, handle, displayName]
+        [actor.userId, handle, displayName, isFirstUser, isFirstUser]
       );
       return sendOk(result.rows[0]);
     } catch (error) {
@@ -142,6 +164,58 @@ export function registerUserRoutes(app: FastifyInstance<any, any, any, any, any>
       ]);
       await pool.query("DELETE FROM app.workspace_members WHERE user_id = $1", [targetUserId]);
       return reply.status(204).send();
+    } catch (error) {
+      return mapError(request, reply, error);
+    }
+  });
+
+  app.post("/api/me/change-password", async (request, reply) => {
+    try {
+      const body = readBodyObject(request);
+      const currentPassword = readRequiredString(body, "currentPassword");
+      const newPassword = readRequiredString(body, "newPassword");
+
+      const result = await auth.api.changePassword({
+        body: { currentPassword, newPassword },
+        headers: fromNodeHeaders(request.headers)
+      });
+
+      return sendOk({ status: true });
+    } catch (error) {
+      return mapError(request, reply, error);
+    }
+  });
+
+  app.post("/api/users/:userId/password", async (request, reply) => {
+    try {
+      const actor = await requireActor(request);
+      await requireCanManageUsers(actor.userId);
+      const targetUserId = readRequiredString(request.params as Record<string, unknown>, "userId");
+      const body = readBodyObject(request);
+      const adminPassword = readRequiredString(body, "adminPassword");
+      const newPassword = readRequiredString(body, "newPassword");
+
+      const adminAccount = await pool.query<{ password: string | null }>(
+        `SELECT password FROM auth.account WHERE "userId" = $1 AND "providerId" = 'email'`,
+        [actor.userId]
+      );
+      const storedHash = adminAccount.rows[0]?.password;
+      if (!storedHash) {
+        throw new HttpError(400, "VALIDATION_ERROR", "No password set on your account");
+      }
+
+      const valid = await verifyPassword({ hash: storedHash, password: adminPassword });
+      if (!valid) {
+        throw new HttpError(403, "FORBIDDEN", "Your password is incorrect");
+      }
+
+      const newHash = await hashPassword(newPassword);
+      await pool.query(
+        `UPDATE auth.account SET password = $1, "updatedAt" = now() WHERE "userId" = $2 AND "providerId" = 'email'`,
+        [newHash, targetUserId]
+      );
+
+      return sendOk({ status: true });
     } catch (error) {
       return mapError(request, reply, error);
     }

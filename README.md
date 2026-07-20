@@ -25,12 +25,15 @@ This repo is split into two independent pnpm projects:
 ```sh
 corepack pnpm -C backend install
 corepack pnpm -C frontend install
-cp .env.example .env
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
 ```
 
-Edit `.env` as needed — the defaults work with a local PostgreSQL instance on the standard port.
+Edit each `.env` as needed — the defaults work with a local PostgreSQL instance on the standard port. Backend and frontend have separate `.env` files since they may be deployed independently.
 
 ### Environment Variables
+
+**Backend** (`backend/.env`):
 
 | Variable | Default | Description |
 | --- | --- | --- |
@@ -40,6 +43,12 @@ Edit `.env` as needed — the defaults work with a local PostgreSQL instance on 
 | `BETTER_AUTH_SECRET` | *(required)* | Random string ≥ 32 characters |
 | `WEB_ORIGIN` | `http://localhost:3000,...` | Comma-separated allowed CORS origins |
 | `AUTH_SIGNUP_ENABLED` | `true` | Allow new user registration |
+
+**Frontend** (`frontend/.env`):
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `VITE_API_URL` | `http://localhost:4000` | Backend API URL (falls back to current host:4000) |
 
 ## Database Setup
 
@@ -63,6 +72,55 @@ To start/stop a local PostgreSQL instance managed by the project:
 npm run db:start
 npm run db:stop
 ```
+
+### PostgreSQL User vs Application User
+
+TablesPro has two layers of users. They are independent and serve different purposes.
+
+**PostgreSQL user** is the database credential defined in `DATABASE_URL`. It controls who can connect to PostgreSQL and what tables they can read/write. This user has no concept of handles, display names, or app permissions — it is purely a database access role. The default setup uses a single shared credential (`dev` / `Password1234`) for all local development.
+
+**Application users** are the people who sign in to TablesPro. They are stored across two tables:
+
+- `auth.user` + `auth.account` — Managed by Better Auth. Stores email, password hash, and session tokens.
+- `app.user_profiles` — Stores the handle, display name, and permission flags (`can_create_workspaces`, `can_manage_users`).
+
+When someone signs up, both sets of rows are created. When `AUTH_SIGNUP_ENABLED=false`, signup is blocked at the HTTP level but the seed script can still insert directly into both tables.
+
+### Seeding the First Admin
+
+On a fresh database with no users, you need to create the first admin account. This user gets full permissions (`can_create_workspaces` and `can_manage_users`) and a default workspace.
+
+```sh
+npm run seed-admin
+```
+
+This runs `backend/apps/api/src/seed-admin.ts`, which uses the same `auth.api.signUpEmail()` call that the signup page uses. This ensures password hashing is always handled by Better Auth, and the same code path is used whether you run the script or sign up through the UI.
+
+The script:
+
+1. Checks if any users already exist — if so, exits early
+2. Creates the Better Auth account via `auth.api.signUpEmail()`
+3. Creates the `app.user_profiles` row with admin permissions
+4. Creates a "My Workspace" and adds the user as workspace admin
+
+If `AUTH_SIGNUP_ENABLED=false`, the signup page is blocked but this script still works because it calls the Better Auth API directly (bypassing the HTTP-level signup gate).
+
+Default credentials (override with environment variables):
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `ADMIN_EMAIL` | `admin@example.com` | Login email |
+| `ADMIN_PASSWORD` | `admin1234` | Login password |
+| `ADMIN_HANDLE` | `admin` | Username handle |
+| `ADMIN_DISPLAY_NAME` | `Admin` | Display name |
+
+Example with custom credentials:
+
+```sh
+ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=changeme ADMIN_HANDLE=jdoe ADMIN_DISPLAY_NAME="Jane Doe" npm run seed-admin
+```
+
+After the first admin is created, they can sign in and use the admin panel to create additional users.
 
 ## Running for Development
 

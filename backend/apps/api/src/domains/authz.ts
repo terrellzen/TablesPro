@@ -3,7 +3,6 @@ import { assertAllowed, type AuthorizationSubject, type WorkspaceRole } from "@t
 import type { FastifyRequest } from "fastify";
 import { pool } from "../db/pool.js";
 import { getSession } from "../auth/session.js";
-import { env } from "../env.js";
 import { HttpError } from "./http.js";
 
 export type ApiActor = {
@@ -11,24 +10,11 @@ export type ApiActor = {
 };
 
 export async function requireActor(request: FastifyRequest<any, any, any, any, any, any, any, any>): Promise<ApiActor> {
-  try {
-    const session = await getSession(request);
-    const userId = (session as { user?: { id?: string } } | null)?.user?.id;
-    if (userId) {
-      return { userId };
-    }
-  } catch (error) {
-    if (env.nodeEnv !== "development") {
-      throw error;
-    }
+  const session = await getSession(request);
+  const userId = (session as { user?: { id?: string } } | null)?.user?.id;
+  if (userId) {
+    return { userId };
   }
-
-  if (env.nodeEnv === "development" && process.env.DEV_AUTH_USER_ID) {
-    const header = request.headers["x-dev-user-id"];
-    const devUserId = Array.isArray(header) ? header[0] : header;
-    return { userId: devUserId ?? process.env.DEV_AUTH_USER_ID };
-  }
-
   throw new HttpError(401, "UNAUTHORIZED", "Authenticated session does not include a user id");
 }
 

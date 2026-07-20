@@ -77,6 +77,41 @@ export function registerBaseRoutes(app: FastifyInstance<any, any, any, any, any>
     }
   });
 
+  app.patch("/api/bases/:baseId", async (request, reply) => {
+    try {
+      const actor = await requireActor(request);
+      const baseId = readUuidParam(request.params, "baseId");
+      const { workspaceId } = await authorizeBase(actor, baseId, { resource: "base", action: "update" });
+      const body = readBodyObject(request);
+      const name = readRequiredString(body, "name");
+      const result = await pool.query(
+        `
+          UPDATE app.bases
+          SET name = $1, updated_at = now(), updated_by = $2, row_version = row_version + 1
+          WHERE base_id = $3 AND deleted_at IS NULL
+          RETURNING base_id, workspace_id, name, created_at, updated_at, row_version
+        `,
+        [name, actor.userId, baseId]
+      );
+      if (!result.rows[0]) {
+        throw new HttpError(404, "NOT_FOUND", "Base was not found");
+      }
+      await writeAuditEvent({
+        workspaceId,
+        actorUserId: actor.userId,
+        action: "base.update",
+        entityType: "base",
+        entityId: baseId,
+        requestId: request.id,
+        outcome: "success",
+        metadata: { name }
+      });
+      return sendOk(result.rows[0]);
+    } catch (error) {
+      return mapError(request, reply, error);
+    }
+  });
+
   app.delete("/api/workspaces/:workspaceId/bases/:baseId", async (request, reply) => {
     const client = await pool.connect();
     try {

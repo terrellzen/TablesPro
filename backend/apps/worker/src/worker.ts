@@ -6,7 +6,7 @@ import pg from "pg";
 import type { QueryResult } from "pg";
 import { calculateRetry, quoteAppDataTable, quoteIdentifier, sanitizeCsvCell } from "@tablespro/database";
 
-const repositoryRoot = process.env.INIT_CWD ?? resolve(process.cwd(), "../..");
+const repositoryRoot = resolve(process.cwd(), ".");
 config({ path: resolve(repositoryRoot, ".env") });
 
 const databaseUrl = process.env.DATABASE_URL;

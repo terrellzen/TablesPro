@@ -707,6 +707,20 @@ h1 {
   padding: 8px 10px;
 }
 
+.password-change-form {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  margin-bottom: 12px;
+}
+
+.admin-password-form {
+  border-left: 3px solid var(--color-primary);
+}
+
 .stacked-field {
   display: grid;
   gap: 5px;

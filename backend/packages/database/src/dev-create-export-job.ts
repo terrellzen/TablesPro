@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { config } from "dotenv";
 import pg from "pg";
 
-const repositoryRoot = process.env.INIT_CWD ?? resolve(process.cwd(), "../..");
+const repositoryRoot = resolve(process.cwd(), ".");
 config({ path: resolve(repositoryRoot, ".env") });
 
 const databaseUrl = process.env.DATABASE_URL;

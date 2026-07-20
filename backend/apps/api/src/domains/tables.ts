@@ -110,6 +110,77 @@ export function registerTableRoutes(app: FastifyInstance<any, any, any, any, any
     }
   });
 
+  app.patch("/api/tables/:tableId", async (request, reply) => {
+    try {
+      const actor = await requireActor(request);
+      const tableId = readUuidParam(request.params, "tableId");
+      const { workspaceId } = await authorizeTable(actor, tableId, { resource: "table", action: "update" });
+      const body = readBodyObject(request);
+      const name = readRequiredString(body, "name");
+      const result = await pool.query(
+        `
+          UPDATE app.tables
+          SET name = $1, updated_at = now(), updated_by = $2, row_version = row_version + 1
+          WHERE table_id = $3 AND deleted_at IS NULL
+          RETURNING table_id, base_id, name, primary_display_field_id, created_at, updated_at, row_version
+        `,
+        [name, actor.userId, tableId]
+      );
+      if (!result.rows[0]) {
+        throw new HttpError(404, "NOT_FOUND", "Table was not found");
+      }
+      await writeAuditEvent({
+        workspaceId,
+        actorUserId: actor.userId,
+        action: "table.update",
+        entityType: "table",
+        entityId: tableId,
+        requestId: request.id,
+        outcome: "success",
+        metadata: { name }
+      });
+      return sendOk(result.rows[0]);
+    } catch (error) {
+      return mapError(request, reply, error);
+    }
+  });
+
+  app.patch("/api/tables/:tableId/fields/:fieldId", async (request, reply) => {
+    try {
+      const actor = await requireActor(request);
+      const tableId = readUuidParam(request.params, "tableId");
+      const fieldId = readUuidParam(request.params, "fieldId");
+      const { workspaceId } = await authorizeTable(actor, tableId, { resource: "field", action: "update" });
+      const body = readBodyObject(request);
+      const name = readRequiredString(body, "name");
+      const result = await pool.query(
+        `
+          UPDATE app.fields
+          SET name = $1, updated_at = now(), updated_by = $2, row_version = row_version + 1
+          WHERE field_id = $3 AND table_id = $4 AND tombstoned_at IS NULL
+          RETURNING field_id, table_id, field_group_id, name, physical_column_name, field_type, position, width, pinned, hidden, indexed, options, row_version
+        `,
+        [name, actor.userId, fieldId, tableId]
+      );
+      if (!result.rows[0]) {
+        throw new HttpError(404, "NOT_FOUND", "Field was not found");
+      }
+      await writeAuditEvent({
+        workspaceId,
+        actorUserId: actor.userId,
+        action: "field.update",
+        entityType: "field",
+        entityId: fieldId,
+        requestId: request.id,
+        outcome: "success",
+        metadata: { tableId, name }
+      });
+      return sendOk(result.rows[0]);
+    } catch (error) {
+      return mapError(request, reply, error);
+    }
+  });
+
   app.post("/api/tables/:tableId/fields", async (request, reply) => {
     const client = await pool.connect();
     try {

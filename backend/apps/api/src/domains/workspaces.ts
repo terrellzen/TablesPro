@@ -91,6 +91,41 @@ export function registerWorkspaceRoutes(app: FastifyInstance<any, any, any, any,
     }
   });
 
+  app.patch("/api/workspaces/:workspaceId", async (request, reply) => {
+    try {
+      const actor = await requireActor(request);
+      const workspaceId = readUuidParam(request.params, "workspaceId");
+      await authorizeWorkspace(actor, workspaceId, { resource: "workspace", action: "update" });
+      const body = readBodyObject(request);
+      const name = readRequiredString(body, "name");
+      const result = await pool.query(
+        `
+          UPDATE app.workspaces
+          SET name = $1, updated_at = now(), updated_by = $2, row_version = row_version + 1
+          WHERE workspace_id = $3 AND deleted_at IS NULL
+          RETURNING workspace_id, name, created_at, updated_at, row_version
+        `,
+        [name, actor.userId, workspaceId]
+      );
+      if (!result.rows[0]) {
+        throw new HttpError(404, "NOT_FOUND", "Workspace was not found");
+      }
+      await writeAuditEvent({
+        workspaceId,
+        actorUserId: actor.userId,
+        action: "workspace.update",
+        entityType: "workspace",
+        entityId: workspaceId,
+        requestId: request.id,
+        outcome: "success",
+        metadata: { name }
+      });
+      return sendOk(result.rows[0]);
+    } catch (error) {
+      return mapError(request, reply, error);
+    }
+  });
+
   app.delete("/api/workspaces/:workspaceId", async (request, reply) => {
     const client = await pool.connect();
     try {

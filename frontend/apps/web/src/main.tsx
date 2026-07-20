@@ -7,6 +7,7 @@ import {
   FolderPlus,
   Grid3X3,
   History,
+  KeyRound,
   Layers3,
   LogIn,
   LogOut,
@@ -516,6 +517,28 @@ function App() {
     }
   }
 
+  async function changeMyPassword(currentPassword: string, newPassword: string): Promise<boolean> {
+    try {
+      await mutate("/api/me/change-password", { currentPassword, newPassword });
+      setStatus({ tone: "success", text: "Password changed" });
+      return true;
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+      return false;
+    }
+  }
+
+  async function changeUserPassword(userId: string, adminPassword: string, newPassword: string): Promise<boolean> {
+    try {
+      await mutate(`/api/users/${encodeURIComponent(userId)}/password`, { adminPassword, newPassword });
+      setStatus({ tone: "success", text: "Password changed" });
+      return true;
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+      return false;
+    }
+  }
+
   async function saveCell(record: RecordRow, field: Field) {
     if (!selectedTableId || !selectedWorkspaceId) {
       return;
@@ -723,6 +746,7 @@ function App() {
           onApiServerChange={handleApiServerChange}
           onProfileChange={setProfile}
           onLogout={logout}
+          onChangePassword={changeMyPassword}
         />
 
         {profile?.can_manage_users && (
@@ -789,6 +813,7 @@ function App() {
             onChangeUserPermissions={changeUserPermissions}
             onRemoveUser={removeUser}
             onCreateUser={createUser}
+            onChangeUserPassword={changeUserPassword}
           />
         ) : (
           <>
@@ -1091,10 +1116,17 @@ function AccountBlock(props: {
   onApiServerChange: (url: string) => Promise<void>;
   onProfileChange: (profile: UserProfile) => void;
   onLogout: () => Promise<void>;
+  onChangePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
 }) {
   const [serverDraft, setServerDraft] = useState(props.apiServerUrl);
   const [handleDraft, setHandleDraft] = useState(props.profile?.handle ?? "");
   const [serverStatus, setServerStatus] = useState("");
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordStatus, setPasswordStatus] = useState("");
+  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
 
   useEffect(() => {
     setServerDraft(props.apiServerUrl);
@@ -1126,6 +1158,27 @@ function AccountBlock(props: {
     }
   }
 
+  async function submitPassword(event: React.FormEvent) {
+    event.preventDefault();
+    if (newPassword !== confirmPassword) {
+      setPasswordStatus("Passwords do not match");
+      return;
+    }
+    setPasswordSubmitting(true);
+    setPasswordStatus("");
+    const ok = await props.onChangePassword(currentPassword, newPassword);
+    setPasswordSubmitting(false);
+    if (ok) {
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setShowPasswordForm(false);
+      setPasswordStatus("");
+    } else {
+      setPasswordStatus("Failed to change password");
+    }
+  }
+
   return (
     <div className="account-stack">
       <div className="account-block">
@@ -1147,6 +1200,36 @@ function AccountBlock(props: {
         <UserRound size={15} />
         Save id
       </button>
+
+      {!showPasswordForm ? (
+        <button type="button" className="small-button" onClick={() => setShowPasswordForm(true)}>
+          Change password
+        </button>
+      ) : (
+        <form className="password-change-form" onSubmit={(event) => void submitPassword(event)}>
+          <label className="stacked-field server-field">
+            <span>Current password</span>
+            <input type="password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
+          </label>
+          <label className="stacked-field server-field">
+            <span>New password</span>
+            <input type="password" required minLength={8} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+          </label>
+          <label className="stacked-field server-field">
+            <span>Confirm new password</span>
+            <input type="password" required minLength={8} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} />
+          </label>
+          <div className="inline-form">
+            <button type="submit" className="small-button" disabled={passwordSubmitting || !currentPassword || !newPassword}>
+              {passwordSubmitting ? "Saving" : "Save password"}
+            </button>
+            <button type="button" className="small-button" onClick={() => { setShowPasswordForm(false); setPasswordStatus(""); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); }}>
+              Cancel
+            </button>
+          </div>
+          {passwordStatus && <span className="server-status">{passwordStatus}</span>}
+        </form>
+      )}
 
       <label className="stacked-field server-field">
         <span>API server</span>
@@ -1232,8 +1315,31 @@ function AdminPanel(props: {
   onChangeUserPermissions: (user: UserProfile, patch: Partial<Pick<UserProfile, "can_create_workspaces" | "can_manage_users">>) => Promise<void>;
   onRemoveUser: (user: UserProfile) => Promise<void>;
   onCreateUser: (fields: { email: string; password: string; handle: string; displayName: string; canCreateWorkspaces: boolean; canManageUsers: boolean }) => Promise<UserProfile | undefined>;
+  onChangeUserPassword: (userId: string, adminPassword: string, newPassword: string) => Promise<boolean>;
 }) {
   const [tab, setTab] = useState<"users" | "audit">("users");
+  const [passwordUserId, setPasswordUserId] = useState<string | null>(null);
+  const [adminPassword, setAdminPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordStatus, setPasswordStatus] = useState("");
+  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
+
+  async function submitPassword(event: React.FormEvent) {
+    event.preventDefault();
+    if (!passwordUserId) return;
+    setPasswordSubmitting(true);
+    setPasswordStatus("");
+    const ok = await props.onChangeUserPassword(passwordUserId, adminPassword, newPassword);
+    setPasswordSubmitting(false);
+    if (ok) {
+      setPasswordUserId(null);
+      setAdminPassword("");
+      setNewPassword("");
+      setPasswordStatus("");
+    } else {
+      setPasswordStatus("Failed — check your password");
+    }
+  }
 
   return (
     <section className="admin-page">
@@ -1256,6 +1362,32 @@ function AdminPanel(props: {
         <div className="admin-page-content">
           <CreateUserForm onCreateUser={props.onCreateUser} />
 
+          {passwordUserId && (
+            <form className="password-change-form admin-password-form" onSubmit={(event) => void submitPassword(event)}>
+              <div className="panel-heading inline-heading">
+                <ShieldCheck size={15} />
+                <span>Change password for @{props.users.find((u) => u.user_id === passwordUserId)?.handle ?? "user"}</span>
+              </div>
+              <label className="stacked-field">
+                <span>Your password (admin verification)</span>
+                <input type="password" required value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} />
+              </label>
+              <label className="stacked-field">
+                <span>New password for user</span>
+                <input type="password" required minLength={8} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+              </label>
+              <div className="inline-form">
+                <button type="submit" className="small-button" disabled={passwordSubmitting || !adminPassword || !newPassword}>
+                  {passwordSubmitting ? "Saving" : "Set password"}
+                </button>
+                <button type="button" className="small-button" onClick={() => { setPasswordUserId(null); setAdminPassword(""); setNewPassword(""); setPasswordStatus(""); }}>
+                  Cancel
+                </button>
+              </div>
+              {passwordStatus && <span className="server-status">{passwordStatus}</span>}
+            </form>
+          )}
+
           <div className="admin-section">
             <div className="panel-heading inline-heading">
               <Users size={15} />
@@ -1266,8 +1398,8 @@ function AdminPanel(props: {
               {props.users.map((user) => (
                 <div className="user-row" key={user.user_id}>
                   <div className="user-info">
-                    <strong>@{user.handle}</strong>
-                    <span>{user.display_name}</span>
+                    <strong>{user.display_name}</strong>
+                    <span>@{user.handle}</span>
                     {user.user_id === props.currentUser.id && <span className="badge">You</span>}
                   </div>
                   <div className="user-actions">
@@ -1275,7 +1407,7 @@ function AdminPanel(props: {
                       <input
                         type="checkbox"
                         checked={user.can_create_workspaces}
-                        disabled={!props.profile?.can_manage_users}
+                        disabled={!props.profile?.can_manage_users || user.user_id === props.currentUser.id}
                         onChange={(event) => void props.onChangeUserPermissions(user, { can_create_workspaces: event.target.checked })}
                       />
                       Create
@@ -1284,11 +1416,20 @@ function AdminPanel(props: {
                       <input
                         type="checkbox"
                         checked={user.can_manage_users}
-                        disabled={!props.profile?.can_manage_users}
+                        disabled={!props.profile?.can_manage_users || user.user_id === props.currentUser.id}
                         onChange={(event) => void props.onChangeUserPermissions(user, { can_manage_users: event.target.checked })}
                       />
                       Manage
                     </label>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      disabled={!props.profile?.can_manage_users}
+                      onClick={() => { setPasswordUserId(user.user_id); setAdminPassword(""); setNewPassword(""); setPasswordStatus(""); }}
+                      aria-label={`Change password for ${user.handle}`}
+                    >
+                      <KeyRound size={15} />
+                    </button>
                     <button
                       type="button"
                       className="icon-button danger"

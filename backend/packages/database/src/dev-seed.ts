@@ -4,7 +4,7 @@ import { config } from "dotenv";
 import pg from "pg";
 import { quoteAppDataTable, quoteIdentifier, toPhysicalFieldName, toPhysicalTableName } from "./index.js";
 
-const repositoryRoot = process.env.INIT_CWD ?? resolve(process.cwd(), "../..");
+const repositoryRoot = resolve(process.cwd(), ".");
 config({ path: resolve(repositoryRoot, ".env") });
 
 const databaseUrl = process.env.DATABASE_URL;

@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { config } from "dotenv";
 
-const repositoryRoot = process.env.INIT_CWD ?? resolve(process.cwd(), "../..");
+const repositoryRoot = resolve(process.cwd(), ".");
 config({ path: resolve(repositoryRoot, ".env") });
 
 type Env = {
