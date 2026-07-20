@@ -15,6 +15,7 @@ import { HttpError, mapError, readBodyObject, readLimit, readOptionalString, rea
 
 type FieldRow = {
   field_id: string;
+  name: string;
   physical_column_name: string;
   field_type: any;
 };
@@ -148,6 +149,13 @@ export function registerRecordRoutes(app: FastifyInstance<any, any, any, any, an
         throw new HttpError(400, "VALIDATION_ERROR", "At least one record value is required");
       }
 
+      const columnNames = fields.map((field) => quoteIdentifier(field.physical_column_name));
+      const beforeResult = await pool.query(
+        `SELECT ${columnNames.join(", ")} FROM ${quoteAppDataTable(tableId)} WHERE record_id = $1 AND deleted_at IS NULL`,
+        [recordId]
+      );
+      const beforeRow = beforeResult.rows[0] ?? {};
+
       const params = [...fields.map((field) => values[field.field_id]), actor.userId, recordId, expectedRowVersion];
       const setSql = fields
         .map((field, index) => `${quoteIdentifier(field.physical_column_name)} = $${index + 1}`)
@@ -175,6 +183,17 @@ export function registerRecordRoutes(app: FastifyInstance<any, any, any, any, an
         throw new HttpError(409, "CONFLICT", "Record version conflict", current.rows[0] ?? null);
       }
 
+      const afterRow = result.rows[0];
+      const diff: Record<string, { before: unknown; after: unknown }> = {};
+      for (const field of fields) {
+        const col = field.physical_column_name;
+        const oldVal = beforeRow[col];
+        const newVal = afterRow[col];
+        if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+          diff[field.name] = { before: oldVal ?? null, after: newVal ?? null };
+        }
+      }
+
       await writeAuditEvent({
         workspaceId,
         actorUserId: actor.userId,
@@ -183,6 +202,7 @@ export function registerRecordRoutes(app: FastifyInstance<any, any, any, any, an
         entityId: recordId,
         requestId: request.id,
         outcome: "success",
+        diff,
         metadata: { tableId, fieldIds: Object.keys(values) }
       });
 
@@ -235,7 +255,7 @@ async function readFields(tableId: string, selectedFieldIds: string[]): Promise<
 
   const result = await pool.query<FieldRow>(
     `
-      SELECT field_id, physical_column_name, field_type
+      SELECT field_id, name, physical_column_name, field_type
       FROM app.fields
       WHERE table_id = $1
         AND tombstoned_at IS NULL

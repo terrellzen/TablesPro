@@ -10,7 +10,7 @@ export function registerViewRoutes(app: FastifyInstance<any, any, any, any, any>
       const actor = await requireActor(request);
       const tableId = readUuidParam(request.params, "tableId");
       await authorizeTable(actor, tableId, { resource: "view", action: "read" });
-      const result = await pool.query(
+      const viewsResult = await pool.query(
         `
           SELECT saved_view_id, table_id, owner_user_id, name, is_shared, search, visible_field_ids,
                  field_order, field_widths, frozen_field_ids, collapsed_field_group_ids, density, created_at, updated_at
@@ -21,7 +21,42 @@ export function registerViewRoutes(app: FastifyInstance<any, any, any, any, any>
         `,
         [tableId, actor.userId]
       );
-      return sendOk(result.rows);
+      const views = viewsResult.rows;
+      if (views.length === 0) return sendOk(views);
+
+      const viewIds = views.map((v) => v.saved_view_id);
+      const [filtersResult, sortsResult] = await Promise.all([
+        pool.query(
+          `SELECT saved_view_id, filter_ast FROM app.saved_view_filters WHERE saved_view_id = ANY($1::uuid[])`,
+          [viewIds]
+        ),
+        pool.query(
+          `SELECT saved_view_id, field_id, direction, position FROM app.saved_view_sorts WHERE saved_view_id = ANY($1::uuid[]) ORDER BY position`,
+          [viewIds]
+        )
+      ]);
+
+      const filtersByView = new Map<string, unknown[]>();
+      for (const row of filtersResult.rows) {
+        const list = filtersByView.get(row.saved_view_id) ?? [];
+        list.push(row.filter_ast);
+        filtersByView.set(row.saved_view_id, list);
+      }
+
+      const sortsByView = new Map<string, { field_id: string; direction: string }[]>();
+      for (const row of sortsResult.rows) {
+        const list = sortsByView.get(row.saved_view_id) ?? [];
+        list.push({ field_id: row.field_id, direction: row.direction });
+        sortsByView.set(row.saved_view_id, list);
+      }
+
+      const enriched = views.map((v) => ({
+        ...v,
+        filters: filtersByView.get(v.saved_view_id) ?? [],
+        sorts: sortsByView.get(v.saved_view_id) ?? []
+      }));
+
+      return sendOk(enriched);
     } catch (error) {
       return mapError(request, reply, error);
     }
@@ -36,6 +71,9 @@ export function registerViewRoutes(app: FastifyInstance<any, any, any, any, any>
       const name = readRequiredString(body, "name");
       const search = readOptionalString(body, "search");
       const isShared = body.isShared === true;
+      const filters = Array.isArray(body.filters) ? body.filters : [];
+      const sorts = Array.isArray(body.sorts) ? body.sorts : [];
+
       const result = await pool.query(
         `
           INSERT INTO app.saved_views (
@@ -70,6 +108,24 @@ export function registerViewRoutes(app: FastifyInstance<any, any, any, any, any>
         ]
       );
       const view = result.rows[0];
+
+      for (const filterAst of filters) {
+        await pool.query(
+          `INSERT INTO app.saved_view_filters (saved_view_id, filter_ast) VALUES ($1, $2::jsonb)`,
+          [view.saved_view_id, JSON.stringify(filterAst)]
+        );
+      }
+
+      for (let i = 0; i < sorts.length; i++) {
+        const sort = sorts[i] as { fieldId: string; direction: string };
+        if (sort.fieldId && (sort.direction === "asc" || sort.direction === "desc")) {
+          await pool.query(
+            `INSERT INTO app.saved_view_sorts (saved_view_id, field_id, direction, position) VALUES ($1, $2, $3, $4)`,
+            [view.saved_view_id, sort.fieldId, sort.direction, i]
+          );
+        }
+      }
+
       await writeAuditEvent({
         workspaceId,
         actorUserId: actor.userId,
@@ -80,7 +136,7 @@ export function registerViewRoutes(app: FastifyInstance<any, any, any, any, any>
         outcome: "success",
         metadata: { tableId, name, isShared }
       });
-      return sendCreated(reply, view);
+      return sendCreated(reply, { ...view, filters, sorts });
     } catch (error) {
       return mapError(request, reply, error);
     }

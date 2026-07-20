@@ -84,15 +84,44 @@ type SavedView = {
   saved_view_id: string;
   name: string;
   is_shared: boolean;
+  search: string | null;
+  visible_field_ids: string[];
+  field_order: string[];
+  filters: { kind: string; fieldId: string; operator: string; value: string }[];
+  sorts: { field_id: string; direction: string }[];
 };
 
 type AuditEvent = {
   event_id: string;
+  workspace_id: string;
+  workspace_name: string;
+  actor_user_id: string;
+  actor_name: string;
   action: string;
   entity_type: string;
   entity_id: string;
   outcome: string;
   occurred_at: string;
+  diff: Record<string, { before: unknown; after: unknown }>;
+  metadata: Record<string, unknown>;
+  table_name: string | null;
+};
+
+type AdminWorkspace = {
+  workspace_id: string;
+  name: string;
+  created_at: string;
+  member_count: number;
+};
+
+type AdminBase = {
+  base_id: string;
+  name: string;
+};
+
+type AdminTable = {
+  table_id: string;
+  name: string;
 };
 
 type WorkspaceMember = {
@@ -158,7 +187,9 @@ function App() {
   const [fields, setFields] = useState<Field[]>([]);
   const [records, setRecords] = useState<RecordRow[]>([]);
   const [views, setViews] = useState<SavedView[]>([]);
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [adminWorkspaces, setAdminWorkspaces] = useState<AdminWorkspace[]>([]);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [directUserId, setDirectUserId] = useState("");
@@ -185,7 +216,7 @@ function App() {
     name?: string;
   } | null>(null);
   const [modalValue, setModalValue] = useState("");
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: { label: string; onClick: () => void }[] } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: { label: string; onClick: () => void; className?: string; divider?: boolean }[] } | null>(null);
 
   const selectedWorkspace = workspaces.find((workspace) => workspace.workspace_id === selectedWorkspaceId) ?? null;
   const selectedBase = bases.find((base) => base.base_id === selectedBaseId) ?? null;
@@ -266,8 +297,22 @@ function App() {
   }, [filterFieldId, filterValue, sortDirection, sortFieldId]);
 
   const loadAuditEvents = useCallback(async (workspaceId: string) => {
-    const response = await api<PageEnvelope<AuditEvent>>(`/api/workspaces/${workspaceId}/audit-events?limit=25`);
+    const response = await api<PageEnvelope<AuditEvent>>(`/api/workspaces/${workspaceId}/audit-events?limit=100`);
     setAuditEvents(response.data);
+  }, []);
+
+  const loadAdminAuditEvents = useCallback(async (workspaceId: string | null, baseId: string | null = null, tableId: string | null = null) => {
+    const params = new URLSearchParams({ limit: "100" });
+    if (workspaceId) params.set("workspaceId", workspaceId);
+    if (baseId) params.set("baseId", baseId);
+    if (tableId) params.set("tableId", tableId);
+    const response = await api<{ data: AuditEvent[] }>(`/api/admin/audit-events?${params.toString()}`);
+    setAuditEvents(response.data);
+  }, []);
+
+  const loadAdminWorkspaces = useCallback(async () => {
+    const response = await api<{ data: AdminWorkspace[] }>("/api/admin/workspaces");
+    setAdminWorkspaces(response.data);
   }, []);
 
   const loadAdminData = useCallback(async (workspaceId: string) => {
@@ -283,6 +328,9 @@ function App() {
     setLoading(true);
     try {
       await loadWorkspaces();
+      if (profile?.can_manage_users) {
+        loadAdminWorkspaces().catch(() => {});
+      }
       if (selectedWorkspaceId) {
         await Promise.all([loadBases(selectedWorkspaceId), loadAuditEvents(selectedWorkspaceId), loadAdminData(selectedWorkspaceId)]);
       }
@@ -298,7 +346,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [loadAdminData, loadAuditEvents, loadBases, loadTableData, loadTables, loadWorkspaces, selectedBaseId, selectedTableId, selectedWorkspaceId]);
+  }, [loadAdminData, loadAdminWorkspaces, loadAuditEvents, loadBases, loadTableData, loadTables, loadWorkspaces, profile, selectedBaseId, selectedTableId, selectedWorkspaceId]);
 
   useEffect(() => {
     void Promise.all([loadAppConfig(), loadCurrentUser()]);
@@ -310,6 +358,12 @@ function App() {
     }
     loadWorkspaces().catch((error) => setStatus({ tone: "danger", text: errorMessage(error) }));
   }, [currentUser, loadWorkspaces]);
+
+  useEffect(() => {
+    if (profile?.can_manage_users) {
+      loadAdminWorkspaces().catch(() => {});
+    }
+  }, [profile, loadAdminWorkspaces]);
 
   useEffect(() => {
     if (!selectedWorkspaceId) {
@@ -338,11 +392,40 @@ function App() {
       setFields([]);
       setRecords([]);
       setViews([]);
+      setActiveViewId(null);
       setSearchValue("");
       return;
     }
     loadTableData(selectedTableId).catch((error) => setStatus({ tone: "danger", text: errorMessage(error) }));
   }, [loadTableData, selectedTableId]);
+
+  useEffect(() => {
+    if (!activeViewId) {
+      setSearchValue("");
+      setFields((prev) => prev.map((f) => ({ ...f, hidden: false })));
+      setFilterFieldId("");
+      setFilterValue("");
+      setSortFieldId("");
+      setSortDirection("asc");
+      return;
+    }
+    const view = views.find((v) => v.saved_view_id === activeViewId);
+    if (!view) return;
+    if (view.search) setSearchValue(view.search);
+    if (view.visible_field_ids?.length) {
+      setFields((prev) => prev.map((f) => ({ ...f, hidden: !view.visible_field_ids.includes(f.field_id) })));
+    }
+    if (view.filters?.length) {
+      const filter = view.filters[0]!;
+      setFilterFieldId(filter.fieldId);
+      setFilterValue(filter.value);
+    }
+    if (view.sorts?.length) {
+      const sort = view.sorts[0]!;
+      setSortFieldId(sort.field_id);
+      setSortDirection(sort.direction as "asc" | "desc");
+    }
+  }, [activeViewId, views]);
 
   async function createWorkspace() {
     if (!profile?.can_create_workspaces) {
@@ -419,11 +502,20 @@ function App() {
 
   async function createViewWithName(name: string) {
     if (!selectedTableId || !selectedWorkspaceId) return;
+    const filters = filterFieldId && filterValue
+      ? [{ kind: "rule", fieldId: filterFieldId, operator: "contains", value: filterValue }]
+      : [];
+    const sorts = sortFieldId
+      ? [{ fieldId: sortFieldId, direction: sortDirection }]
+      : [];
     await mutate(`/api/tables/${selectedTableId}/views`, {
       name,
       isShared: true,
+      search: searchValue || null,
       visibleFieldIds: visibleFields.map((field) => field.field_id),
-      fieldOrder: visibleFields.map((field) => field.field_id)
+      fieldOrder: fields.map((field) => field.field_id),
+      filters,
+      sorts
     });
     await loadTableData(selectedTableId);
     await loadAuditEvents(selectedWorkspaceId);
@@ -730,6 +822,44 @@ function App() {
     }
   }
 
+  async function moveField(fieldId: string, direction: "left" | "right" | "start" | "end") {
+    if (!selectedTableId || !selectedWorkspaceId) return;
+    setFields((prev) => {
+      const idx = prev.findIndex((f) => f.field_id === fieldId);
+      if (idx < 0) return prev;
+      const next = [...prev];
+      let target: number;
+      if (direction === "left") target = idx - 1;
+      else if (direction === "right") target = idx + 1;
+      else if (direction === "start") target = 0;
+      else target = next.length - 1;
+      if (target < 0 || target >= next.length || target === idx) return prev;
+      const moved = next[idx]!;
+      next.splice(idx, 1);
+      next.splice(target, 0, moved);
+      const fieldOrder = next.map((f) => f.field_id);
+      void mutate(`/api/tables/${selectedTableId}/fields/reorder`, { fieldOrder }).then(() => {
+        setStatus({ tone: "success", text: "Field moved" });
+      }).catch((error) => {
+        setStatus({ tone: "danger", text: errorMessage(error) });
+      });
+      return next;
+    });
+  }
+
+  async function deleteField(fieldId: string) {
+    if (!selectedTableId || !selectedWorkspaceId) return;
+    if (!window.confirm("Delete this column and all its data?")) return;
+    try {
+      await request(`/api/tables/${selectedTableId}/fields/${fieldId}`, { method: "DELETE" });
+      await loadTableData(selectedTableId);
+      await loadAuditEvents(selectedWorkspaceId);
+      setStatus({ tone: "success", text: "Column deleted" });
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+    }
+  }
+
   function openRenameModal(type: "workspace" | "base" | "table" | "field", id: string, name: string, parentId?: string) {
     setModalEntity(parentId !== undefined ? { mode: "rename", type, id, parentId, name } : { mode: "rename", type, id, name });
     setModalValue(name);
@@ -949,6 +1079,9 @@ function App() {
             profile={profile}
             users={users}
             auditEvents={auditEvents}
+            adminWorkspaces={adminWorkspaces}
+            workspaces={workspaces}
+            onLoadAdminAuditEvents={loadAdminAuditEvents}
             onChangeUserPermissions={changeUserPermissions}
             onRemoveUser={removeUser}
             onCreateUser={createUser}
@@ -1132,11 +1265,11 @@ function App() {
                 </div>
 
                 <div className="view-tabs" role="tablist" aria-label="Saved views">
-                  <button type="button" role="tab" aria-selected="true">
+                  <button type="button" role="tab" aria-selected={activeViewId === null} onClick={() => setActiveViewId(null)}>
                     All records
                   </button>
                   {views.map((view) => (
-                    <button type="button" role="tab" aria-selected="false" key={view.saved_view_id}>
+                    <button type="button" role="tab" aria-selected={activeViewId === view.saved_view_id} key={view.saved_view_id} onClick={() => setActiveViewId(view.saved_view_id)}>
                       {view.name}
                     </button>
                   ))}
@@ -1156,6 +1289,7 @@ function App() {
                   ) : (
                     <DataGrid
                       fields={visibleFields}
+                      allFields={fields}
                       records={searchedRecords}
                       editingCell={editingCell}
                       draftValue={draftValue}
@@ -1170,6 +1304,8 @@ function App() {
                       onRenameField={(fieldId, name) => {
                         if (selectedTableId) openRenameModal("field", fieldId, name, selectedTableId);
                       }}
+                      onMoveField={moveField}
+                      onDeleteField={deleteField}
                       onContextMenu={(x, y, items) => setContextMenu({ x, y, items })}
                     />
                   )}
@@ -1239,17 +1375,21 @@ function App() {
             onClick={(e) => e.stopPropagation()}
           >
             {contextMenu.items.map((item, i) => (
-              <button
-                key={i}
-                type="button"
-                className="context-menu-item"
-                onClick={() => {
-                  item.onClick();
-                  setContextMenu(null);
-                }}
-              >
-                {item.label}
-              </button>
+              item.divider ? (
+                <div key={i} className="context-menu-divider" />
+              ) : (
+                <button
+                  key={i}
+                  type="button"
+                  className={`context-menu-item${item.className ? ` ${item.className}` : ""}`}
+                  onClick={() => {
+                    item.onClick();
+                    setContextMenu(null);
+                  }}
+                >
+                  {item.label}
+                </button>
+              )
             ))}
           </div>
         </div>
@@ -1609,17 +1749,76 @@ function AdminPanel(props: {
   profile: UserProfile | null;
   users: UserProfile[];
   auditEvents: AuditEvent[];
+  adminWorkspaces: AdminWorkspace[];
+  workspaces: Workspace[];
+  onLoadAdminAuditEvents: (workspaceId: string | null, baseId: string | null, tableId: string | null) => Promise<void>;
   onChangeUserPermissions: (user: UserProfile, patch: Partial<Pick<UserProfile, "can_create_workspaces" | "can_manage_users">>) => Promise<void>;
   onRemoveUser: (user: UserProfile) => Promise<void>;
   onCreateUser: (fields: { email: string; password: string; handle: string; displayName: string; canCreateWorkspaces: boolean; canManageUsers: boolean }) => Promise<UserProfile | undefined>;
   onChangeUserPassword: (userId: string, adminPassword: string, newPassword: string) => Promise<boolean>;
 }) {
-  const [tab, setTab] = useState<"users" | "audit">("users");
+  const [tab, setTab] = useState<"users" | "audit" | "database">("users");
   const [passwordUserId, setPasswordUserId] = useState<string | null>(null);
   const [adminPassword, setAdminPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [passwordStatus, setPasswordStatus] = useState("");
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
+  const [dbStats, setDbStats] = useState<{ database: { name: string; sizeBytes: number; tableCount: number; tables: { name: string; rowCount: number }[] } } | null>(null);
+  const [dbStatsLoading, setDbStatsLoading] = useState(false);
+  const [dbStatsError, setDbStatsError] = useState("");
+  const [auditWorkspaceFilter, setAuditWorkspaceFilter] = useState<string>("");
+  const [auditBaseFilter, setAuditBaseFilter] = useState<string>("");
+  const [auditTableFilter, setAuditTableFilter] = useState<string>("");
+  const [adminBases, setAdminBases] = useState<AdminBase[]>([]);
+  const [adminTables, setAdminTables] = useState<AdminTable[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+
+  const isAdmin = Boolean(props.profile?.can_manage_users);
+  const auditWorkspaces = isAdmin ? props.adminWorkspaces : props.workspaces;
+
+  useEffect(() => {
+    if (tab !== "audit") return;
+    setAuditLoading(true);
+    const wsId = auditWorkspaceFilter || null;
+    const bsId = auditBaseFilter || null;
+    const tbId = auditTableFilter || null;
+    props.onLoadAdminAuditEvents(wsId, bsId, tbId).finally(() => setAuditLoading(false));
+  }, [tab, auditWorkspaceFilter, auditBaseFilter, auditTableFilter]);
+
+  useEffect(() => {
+    if (tab !== "audit" || !auditWorkspaceFilter || !isAdmin) {
+      setAdminBases([]);
+      setAdminTables([]);
+      setAuditBaseFilter("");
+      setAuditTableFilter("");
+      return;
+    }
+    api<{ data: AdminBase[] }>(`/api/admin/workspaces/${auditWorkspaceFilter}/bases`).then((r) => setAdminBases(r.data));
+  }, [tab, auditWorkspaceFilter, isAdmin]);
+
+  useEffect(() => {
+    if (tab !== "audit" || !isAdmin) {
+      if (!auditWorkspaceFilter) {
+        setAdminTables([]);
+        setAuditTableFilter("");
+      }
+      return;
+    }
+    const url = auditBaseFilter
+      ? `/api/admin/workspaces/${auditWorkspaceFilter}/tables?baseId=${auditBaseFilter}`
+      : `/api/admin/workspaces/${auditWorkspaceFilter}/tables`;
+    api<{ data: AdminTable[] }>(url).then((r) => setAdminTables(r.data));
+  }, [tab, auditWorkspaceFilter, auditBaseFilter, isAdmin]);
+
+  useEffect(() => {
+    if (tab !== "database" || dbStats) return;
+    setDbStatsLoading(true);
+    setDbStatsError("");
+    api<{ database: { name: string; sizeBytes: number; tableCount: number; tables: { name: string; rowCount: number }[] } }>("/api/admin/stats")
+      .then(setDbStats)
+      .catch((err) => setDbStatsError(errorMessage(err)))
+      .finally(() => setDbStatsLoading(false));
+  }, [tab, dbStats]);
 
   async function submitPassword(event: React.FormEvent) {
     event.preventDefault();
@@ -1652,6 +1851,10 @@ function AdminPanel(props: {
         <button type="button" role="tab" aria-selected={tab === "audit"} className={tab === "audit" ? "active" : ""} onClick={() => setTab("audit")}>
           <History size={15} />
           Audit log
+        </button>
+        <button type="button" role="tab" aria-selected={tab === "database"} className={tab === "database" ? "active" : ""} onClick={() => setTab("database")}>
+          <Database size={15} />
+          Database
         </button>
       </div>
 
@@ -1751,17 +1954,137 @@ function AdminPanel(props: {
               <History size={15} />
               <span>Recent activity</span>
             </div>
+            <div className="audit-filter-row">
+              <label className="audit-filter">
+                Workspace
+                <select value={auditWorkspaceFilter} onChange={(event) => { setAuditWorkspaceFilter(event.target.value); setAuditBaseFilter(""); setAuditTableFilter(""); }}>
+                  <option value="">All</option>
+                  {auditWorkspaces.map((ws) => (
+                    <option key={ws.workspace_id} value={ws.workspace_id}>{ws.name}</option>
+                  ))}
+                </select>
+              </label>
+              {isAdmin && auditWorkspaceFilter && adminBases.length > 0 && (
+                <label className="audit-filter">
+                  Base
+                  <select value={auditBaseFilter} onChange={(event) => { setAuditBaseFilter(event.target.value); setAuditTableFilter(""); }}>
+                    <option value="">All</option>
+                    {adminBases.map((base: AdminBase) => (
+                      <option key={base.base_id} value={base.base_id}>{base.name}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {isAdmin && auditWorkspaceFilter && adminTables.length > 0 && (
+                <label className="audit-filter">
+                  Table
+                  <select value={auditTableFilter} onChange={(event) => setAuditTableFilter(event.target.value)}>
+                    <option value="">All</option>
+                    {adminTables.map((tbl: AdminTable) => (
+                      <option key={tbl.table_id} value={tbl.table_id}>{tbl.name}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+            {auditLoading && <p className="empty-text">Loading...</p>}
             <div className="audit-full-list">
               {props.auditEvents.map((event) => (
                 <div className="audit-row" key={event.event_id}>
-                  <strong>{event.action}</strong>
-                  <span>{event.entity_type}</span>
-                  <time>{new Date(event.occurred_at).toLocaleString()}</time>
+                  <div className="audit-row-main">
+                    <span className="audit-action">{event.action}</span>
+                    <span className="audit-entity">{event.entity_type}</span>
+                    {event.table_name && <span className="audit-table-badge">{event.table_name}</span>}
+                    {!auditWorkspaceFilter && <span className="audit-workspace">{event.workspace_name}</span>}
+                    <span className="audit-actor">{event.actor_name}</span>
+                    <time>{new Date(event.occurred_at).toLocaleString()}</time>
+                  </div>
+                  {event.diff && Object.keys(event.diff).length > 0 && (
+                    <div className="audit-diff">
+                      {Object.entries(event.diff).map(([fieldName, change]) => (
+                        <div className="audit-diff-row" key={fieldName}>
+                          <span className="audit-diff-field">{fieldName}</span>
+                          <span className="audit-diff-before">{String(change.before ?? "(empty)")}</span>
+                          <span className="audit-diff-arrow">&rarr;</span>
+                          <span className="audit-diff-after">{String(change.after ?? "(empty)")}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {event.metadata && Object.keys(event.metadata).length > 0 && (!event.diff || Object.keys(event.diff).length === 0) && (
+                    <div className="audit-meta">
+                      {Object.entries(event.metadata).map(([key, val]) => (
+                        <span key={key} className="audit-meta-tag">{key}: {String(val)}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
-              {props.auditEvents.length === 0 && <p className="empty-text">No audit events yet.</p>}
+              {props.auditEvents.length === 0 && !auditLoading && <p className="empty-text">No audit events yet.</p>}
             </div>
           </div>
+        </div>
+      )}
+
+      {tab === "database" && (
+        <div className="admin-page-content">
+          {dbStatsLoading && <p className="empty-text">Loading database stats...</p>}
+          {dbStatsError && <p className="empty-text">{dbStatsError}</p>}
+          {dbStats && (() => {
+            const sizeGB = dbStats.database.sizeBytes / (1024 * 1024 * 1024);
+            const sizeMB = dbStats.database.sizeBytes / (1024 * 1024);
+            const sizeLabel = sizeGB >= 1 ? `${sizeGB.toFixed(2)} GB` : `${sizeMB.toFixed(1)} MB`;
+            const isWarning = dbStats.database.sizeBytes >= 10 * 1024 * 1024 * 1024;
+            return (
+              <>
+                <div className="admin-section">
+                  <div className="panel-heading inline-heading">
+                    <Database size={15} />
+                    <span>Database overview</span>
+                  </div>
+                  <div className="db-stats-grid">
+                    <div className="db-stat">
+                      <span className="db-stat-label">Name</span>
+                      <span className="db-stat-value">{dbStats.database.name}</span>
+                    </div>
+                    <div className="db-stat">
+                      <span className="db-stat-label">Size</span>
+                      <span className={`db-stat-value ${isWarning ? "db-stat-warning" : ""}`}>{sizeLabel}</span>
+                    </div>
+                    <div className="db-stat">
+                      <span className="db-stat-label">Data tables</span>
+                      <span className="db-stat-value">{dbStats.database.tableCount}</span>
+                    </div>
+                  </div>
+                  {isWarning && (
+                    <div className="db-warning-banner">
+                      Database size exceeds 10 GB soft limit. Consider archiving old data.
+                    </div>
+                  )}
+                </div>
+                {dbStats.database.tables.length > 0 && (
+                  <div className="admin-section">
+                    <div className="panel-heading inline-heading">
+                      <Table2 size={15} />
+                      <span>Table sizes</span>
+                    </div>
+                    <div className="db-table-list">
+                      <div className="db-table-row db-table-header">
+                        <span>Table</span>
+                        <span>Rows</span>
+                      </div>
+                      {dbStats.database.tables.map((t) => (
+                        <div className="db-table-row" key={t.name}>
+                          <span className="db-table-name">{t.name}</span>
+                          <span>{t.rowCount.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
     </section>
@@ -1849,6 +2172,7 @@ function CreateUserForm(props: {
 
 function DataGrid(props: {
   fields: Field[];
+  allFields: Field[];
   records: RecordRow[];
   editingCell: { recordId: string; fieldId: string } | null;
   draftValue: string;
@@ -1858,7 +2182,9 @@ function DataGrid(props: {
   onSaveCell: (record: RecordRow, field: Field) => Promise<void>;
   onDeleteRecord: (record: RecordRow) => void;
   onRenameField: (fieldId: string, name: string) => void;
-  onContextMenu: (x: number, y: number, items: { label: string; onClick: () => void }[]) => void;
+  onMoveField: (fieldId: string, direction: "left" | "right" | "start" | "end") => void;
+  onDeleteField: (fieldId: string) => void;
+  onContextMenu: (x: number, y: number, items: { label: string; onClick: () => void; className?: string; divider?: boolean }[]) => void;
 }) {
   const parentRef = useRef<HTMLDivElement | null>(null);
   const deleteColumnWidth = 40;
@@ -1906,9 +2232,21 @@ function DataGrid(props: {
                 style={{ left: virtualColumn.start, width: virtualColumn.size }}
                 onContextMenu={(e) => {
                   e.preventDefault();
-                  props.onContextMenu(e.clientX, e.clientY, [
+                  const fieldIndex = props.allFields.findIndex((f) => f.field_id === field.field_id);
+                  const items: { label: string; onClick: () => void; className?: string; divider?: boolean }[] = [
                     { label: "Rename", onClick: () => props.onRenameField(field.field_id, field.name) }
-                  ]);
+                  ];
+                  if (fieldIndex > 0) {
+                    items.push({ label: "Move left", onClick: () => props.onMoveField(field.field_id, "left") });
+                    items.push({ label: "Move to beginning", onClick: () => props.onMoveField(field.field_id, "start") });
+                  }
+                  if (fieldIndex < props.allFields.length - 1) {
+                    items.push({ label: "Move right", onClick: () => props.onMoveField(field.field_id, "right") });
+                    items.push({ label: "Move to end", onClick: () => props.onMoveField(field.field_id, "end") });
+                  }
+                  items.push({ label: "", onClick: () => {}, divider: true });
+                  items.push({ label: "Delete column", onClick: () => props.onDeleteField(field.field_id), className: "danger" });
+                  props.onContextMenu(e.clientX, e.clientY, items);
                 }}
               >
                 <span>{field.name}</span>

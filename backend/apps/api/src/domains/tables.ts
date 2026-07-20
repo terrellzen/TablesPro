@@ -243,6 +243,92 @@ export function registerTableRoutes(app: FastifyInstance<any, any, any, any, any
     }
   });
 
+  app.delete("/api/tables/:tableId/fields/:fieldId", async (request, reply) => {
+    const client = await pool.connect();
+    try {
+      const actor = await requireActor(request);
+      const tableId = readUuidParam(request.params, "tableId");
+      const fieldId = readUuidParam(request.params, "fieldId");
+      const { workspaceId } = await authorizeTable(actor, tableId, { resource: "field", action: "delete" });
+
+      const fieldResult = await pool.query(
+        "SELECT field_id, physical_column_name, name FROM app.fields WHERE field_id = $1 AND table_id = $2 AND tombstoned_at IS NULL",
+        [fieldId, tableId]
+      );
+      if (fieldResult.rows.length === 0) {
+        throw new HttpError(404, "NOT_FOUND", "Field was not found");
+      }
+      const field = fieldResult.rows[0];
+
+      await client.query("BEGIN");
+      await client.query(
+        "UPDATE app.fields SET tombstoned_at = now(), updated_at = now(), updated_by = $1, row_version = row_version + 1 WHERE field_id = $2",
+        [actor.userId, fieldId]
+      );
+      await client.query(`ALTER TABLE ${quoteAppDataTable(tableId)} DROP COLUMN ${quoteIdentifier(field.physical_column_name)}`);
+      await client.query("COMMIT");
+
+      await writeAuditEvent({
+        workspaceId,
+        actorUserId: actor.userId,
+        action: "field.delete",
+        entityType: "field",
+        entityId: fieldId,
+        requestId: request.id,
+        outcome: "success",
+        metadata: { tableId, name: field.name, physicalColumnName: field.physical_column_name }
+      });
+
+      return reply.status(204).send();
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      return mapError(request, reply, error);
+    } finally {
+      client.release();
+    }
+  });
+
+  app.post("/api/tables/:tableId/fields/reorder", async (request, reply) => {
+    const client = await pool.connect();
+    try {
+      const actor = await requireActor(request);
+      const tableId = readUuidParam(request.params, "tableId");
+      const { workspaceId } = await authorizeTable(actor, tableId, { resource: "field", action: "update" });
+      const body = readBodyObject(request);
+      const fieldOrder = body.fieldOrder;
+      if (!Array.isArray(fieldOrder) || fieldOrder.length === 0 || !fieldOrder.every((id: unknown) => typeof id === "string")) {
+        throw new HttpError(400, "VALIDATION_ERROR", "fieldOrder must be a non-empty array of strings");
+      }
+
+      await client.query("BEGIN");
+      for (let i = 0; i < fieldOrder.length; i++) {
+        await client.query(
+          "UPDATE app.fields SET position = $1, updated_at = now(), updated_by = $2, row_version = row_version + 1 WHERE field_id = $3 AND table_id = $4 AND tombstoned_at IS NULL",
+          [i, actor.userId, fieldOrder[i], tableId]
+        );
+      }
+      await client.query("COMMIT");
+
+      await writeAuditEvent({
+        workspaceId,
+        actorUserId: actor.userId,
+        action: "field.reorder",
+        entityType: "field",
+        entityId: tableId,
+        requestId: request.id,
+        outcome: "success",
+        metadata: { tableId, fieldOrder }
+      });
+
+      return sendOk({ fieldOrder });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      return mapError(request, reply, error);
+    } finally {
+      client.release();
+    }
+  });
+
   app.delete("/api/bases/:baseId/tables/:tableId", async (request, reply) => {
     const client = await pool.connect();
     try {
