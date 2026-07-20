@@ -81,7 +81,7 @@ export function registerBaseRoutes(app: FastifyInstance<any, any, any, any, any>
     try {
       const actor = await requireActor(request);
       const baseId = readUuidParam(request.params, "baseId");
-      const { workspaceId } = await authorizeBase(actor, baseId, { resource: "base", action: "update" });
+      const workspaceId = await authorizeBase(actor, baseId, { resource: "base", action: "update" });
       const body = readBodyObject(request);
       const name = readRequiredString(body, "name");
       const result = await pool.query(

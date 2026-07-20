@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { pool } from "../db/pool.js";
 import { requireActor, authorizeWorkspace } from "./authz.js";
-import { mapError, readBodyObject, readRequiredString, readUuidParam, requireReturnedRow, sendCreated, sendOk } from "./http.js";
+import { mapError, readBodyObject, readRequiredString, readUuidParam, requireReturnedRow, sendCreated, sendOk, HttpError } from "./http.js";
 import { writeAuditEvent } from "./audit.js";
 import { requireCanCreateWorkspaces } from "./users.js";
 

@@ -173,6 +173,14 @@ function App() {
   const [draftValue, setDraftValue] = useState("");
   const [status, setStatus] = useState<Status>({ tone: "idle", text: "Ready" });
   const [loading, setLoading] = useState(false);
+  const [renamingEntity, setRenamingEntity] = useState<{
+    type: "workspace" | "base" | "table" | "field";
+    id: string;
+    parentId?: string;
+    name: string;
+  } | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: { label: string; onClick: () => void }[] } | null>(null);
 
   const selectedWorkspace = workspaces.find((workspace) => workspace.workspace_id === selectedWorkspaceId) ?? null;
   const selectedBase = bases.find((base) => base.base_id === selectedBaseId) ?? null;
@@ -652,6 +660,76 @@ function App() {
     }
   }
 
+  async function renameWorkspace(workspaceId: string, name: string) {
+    if (!name.trim()) return;
+    try {
+      const response = await mutate<{ data: Workspace }>(`/api/workspaces/${workspaceId}`, { name: name.trim() }, "PATCH");
+      setWorkspaces((prev) => prev.map((w) => (w.workspace_id === workspaceId ? { ...w, name: name.trim() } : w)));
+      setStatus({ tone: "success", text: "Workspace renamed" });
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+    }
+  }
+
+  async function renameBase(baseId: string, name: string) {
+    if (!name.trim() || !selectedWorkspaceId) return;
+    try {
+      await mutate(`/api/bases/${baseId}`, { name: name.trim() }, "PATCH");
+      setBases((prev) => prev.map((b) => (b.base_id === baseId ? { ...b, name: name.trim() } : b)));
+      setStatus({ tone: "success", text: "Base renamed" });
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+    }
+  }
+
+  async function renameTable(tableId: string, name: string) {
+    if (!name.trim() || !selectedBaseId || !selectedWorkspaceId) return;
+    try {
+      await mutate(`/api/tables/${tableId}`, { name: name.trim() }, "PATCH");
+      setTables((prev) => prev.map((t) => (t.table_id === tableId ? { ...t, name: name.trim() } : t)));
+      setStatus({ tone: "success", text: "Table renamed" });
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+    }
+  }
+
+  async function renameField(tableId: string, fieldId: string, name: string) {
+    if (!name.trim() || !selectedWorkspaceId) return;
+    try {
+      await mutate(`/api/tables/${tableId}/fields/${fieldId}`, { name: name.trim() }, "PATCH");
+      setFields((prev) => prev.map((f) => (f.field_id === fieldId ? { ...f, name: name.trim() } : f)));
+      setStatus({ tone: "success", text: "Field renamed" });
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+    }
+  }
+
+  function openRenameModal(type: "workspace" | "base" | "table" | "field", id: string, name: string, parentId?: string) {
+    setRenamingEntity(parentId !== undefined ? { type, id, parentId, name } : { type, id, name });
+    setRenameValue(name);
+    setContextMenu(null);
+  }
+
+  function confirmRename() {
+    if (!renamingEntity || !renameValue.trim()) return;
+    const { type, id, parentId } = renamingEntity;
+    switch (type) {
+      case "workspace":
+        void renameWorkspace(id, renameValue);
+        break;
+      case "base":
+        void renameBase(id, renameValue);
+        break;
+      case "table":
+        void renameTable(id, renameValue);
+        break;
+      case "field":
+        void renameField(parentId!, id, renameValue);
+        break;
+    }
+    setRenamingEntity(null);
+  }
+
   async function handleAuthenticated() {
     await loadCurrentUser();
     await loadWorkspaces();
@@ -768,6 +846,16 @@ function App() {
                 type="button"
                 className={`workspace-item ${workspace.workspace_id === selectedWorkspaceId ? "active" : ""}`}
                 onClick={() => setSelectedWorkspaceId(workspace.workspace_id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    items: [
+                      { label: "Rename", onClick: () => openRenameModal("workspace", workspace.workspace_id, workspace.name) }
+                    ]
+                  });
+                }}
               >
                 {workspace.name}
               </button>
@@ -825,6 +913,18 @@ function App() {
                 options={bases.map((base) => ({ value: base.base_id, label: base.name }))}
                 onChange={setSelectedBaseId}
               />
+              {selectedBaseId && (
+                <button
+                  type="button"
+                  className="small-button"
+                  onClick={() => {
+                    const base = bases.find((b) => b.base_id === selectedBaseId);
+                    if (base) openRenameModal("base", base.base_id, base.name);
+                  }}
+                >
+                  Rename base
+                </button>
+              )}
               <button type="button" className="small-button" onClick={createBase}>
                 <FolderPlus size={15} />
                 Base
@@ -842,6 +942,18 @@ function App() {
                 options={tables.map((table) => ({ value: table.table_id, label: table.name }))}
                 onChange={setSelectedTableId}
               />
+              {selectedTableId && (
+                <button
+                  type="button"
+                  className="small-button"
+                  onClick={() => {
+                    const table = tables.find((t) => t.table_id === selectedTableId);
+                    if (table) openRenameModal("table", table.table_id, table.name);
+                  }}
+                >
+                  Rename table
+                </button>
+              )}
               <button type="button" className="small-button" onClick={createTable}>
                 <Grid3X3 size={15} />
                 Table
@@ -934,6 +1046,10 @@ function App() {
                   onCancelEdit={() => setEditingCell(null)}
                   onSaveCell={saveCell}
                   onDeleteRecord={deleteRecord}
+                  onRenameField={(fieldId, name) => {
+                    if (selectedTableId) openRenameModal("field", fieldId, name, selectedTableId);
+                  }}
+                  onContextMenu={(x, y, items) => setContextMenu({ x, y, items })}
                 />
               )}
 
@@ -957,6 +1073,56 @@ function App() {
           {loading ? "Loading" : status.text}
         </footer>
       </section>
+
+      {renamingEntity && (
+        <div className="modal-overlay" onClick={() => setRenamingEntity(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">Rename {renamingEntity.type}</h3>
+            <input
+              className="modal-input"
+              autoFocus
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") confirmRename();
+                if (e.key === "Escape") setRenamingEntity(null);
+              }}
+            />
+            <div className="modal-actions">
+              <button type="button" className="small-button" onClick={() => setRenamingEntity(null)}>
+                Cancel
+              </button>
+              <button type="button" className="small-button primary" onClick={confirmRename} disabled={!renameValue.trim() || renameValue === renamingEntity.name}>
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {contextMenu && (
+        <div className="context-menu-overlay" onClick={() => setContextMenu(null)}>
+          <div
+            className="context-menu"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {contextMenu.items.map((item, i) => (
+              <button
+                key={i}
+                type="button"
+                className="context-menu-item"
+                onClick={() => {
+                  item.onClick();
+                  setContextMenu(null);
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -1560,6 +1726,8 @@ function DataGrid(props: {
   onCancelEdit: () => void;
   onSaveCell: (record: RecordRow, field: Field) => Promise<void>;
   onDeleteRecord: (record: RecordRow) => void;
+  onRenameField: (fieldId: string, name: string) => void;
+  onContextMenu: (x: number, y: number, items: { label: string; onClick: () => void }[]) => void;
 }) {
   const parentRef = useRef<HTMLDivElement | null>(null);
   const deleteColumnWidth = 40;
@@ -1605,6 +1773,12 @@ function DataGrid(props: {
                 className="grid-header-cell"
                 key={field.field_id}
                 style={{ left: virtualColumn.start, width: virtualColumn.size }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  props.onContextMenu(e.clientX, e.clientY, [
+                    { label: "Rename", onClick: () => props.onRenameField(field.field_id, field.name) }
+                  ]);
+                }}
               >
                 <span>{field.name}</span>
                 <small>{field.field_type}</small>
