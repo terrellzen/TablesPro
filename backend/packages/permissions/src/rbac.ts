@@ -39,6 +39,7 @@ const rolePermissions = {
   admin: [
     "workspace:read",
     "workspace:update",
+    "workspace:delete",
     "member:read",
     "member:create",
     "member:update",

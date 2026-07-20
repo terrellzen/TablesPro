@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { pool } from "../db/pool.js";
+import { auth } from "../auth/auth.js";
 import { requireActor } from "./authz.js";
 import { HttpError, mapError, readBodyObject, readRequiredString, sendOk } from "./http.js";
 
@@ -26,6 +27,52 @@ export function registerUserRoutes(app: FastifyInstance<any, any, any, any, any>
       );
       return sendOk(result.rows);
     } catch (error) {
+      return mapError(request, reply, error);
+    }
+  });
+
+  app.post("/api/users", async (request, reply) => {
+    try {
+      const actor = await requireActor(request);
+      await requireCanManageUsers(actor.userId);
+      const body = readBodyObject(request);
+      const email = readRequiredString(body, "email").trim();
+      const password = readRequiredString(body, "password");
+      const handle = normalizeHandle(readRequiredString(body, "handle"));
+      const displayName = readRequiredString(body, "displayName").trim();
+      const canCreateWorkspaces = Boolean(body.canCreateWorkspaces);
+      const canManageUsers = Boolean(body.canManageUsers);
+
+      const result = await auth.api.signUpEmail({
+        body: { name: displayName, email, password }
+      });
+
+      await pool.query(
+        `
+          INSERT INTO app.user_profiles (user_id, handle, display_name, can_create_workspaces, can_manage_users)
+          VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT (user_id) DO UPDATE
+          SET handle = EXCLUDED.handle,
+              display_name = EXCLUDED.display_name,
+              can_create_workspaces = EXCLUDED.can_create_workspaces,
+              can_manage_users = EXCLUDED.can_manage_users,
+              updated_at = now()
+        `,
+        [result.user.id, handle, displayName, canCreateWorkspaces, canManageUsers]
+      );
+
+      return sendOk({
+        user_id: result.user.id,
+        handle,
+        display_name: displayName,
+        can_create_workspaces: canCreateWorkspaces,
+        can_manage_users: canManageUsers,
+        disabled_at: null
+      });
+    } catch (error: any) {
+      if (error?.name === "BASE_ERROR" || error?.message?.includes("already exists")) {
+        return mapError(request, reply, new HttpError(409, "CONFLICT", "A user with this email already exists"));
+      }
       return mapError(request, reply, error);
     }
   });

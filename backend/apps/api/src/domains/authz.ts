@@ -38,7 +38,7 @@ export async function authorizeWorkspace(
   permission: Permission
 ): Promise<AuthorizationSubject> {
   const result = await pool.query<{ role: WorkspaceRole }>(
-    "SELECT role FROM app.workspace_members WHERE workspace_id = $1 AND user_id = $2",
+    "SELECT role FROM app.workspace_members wm JOIN app.workspaces w ON w.workspace_id = wm.workspace_id WHERE wm.workspace_id = $1 AND wm.user_id = $2 AND w.deleted_at IS NULL",
     [workspaceId, actor.userId]
   );
   const role = result.rows[0]?.role;
@@ -58,6 +58,7 @@ export async function authorizeBase(actor: ApiActor, baseId: string, permission:
       FROM app.bases b
       JOIN app.workspace_members wm ON wm.workspace_id = b.workspace_id
       WHERE b.base_id = $1
+        AND b.deleted_at IS NULL
         AND wm.user_id = $2
     `,
     [baseId, actor.userId]
@@ -83,6 +84,7 @@ export async function authorizeTable(actor: ApiActor, tableId: string, permissio
       JOIN app.workspace_members wm ON wm.workspace_id = b.workspace_id
       WHERE t.table_id = $1
         AND t.deleted_at IS NULL
+        AND b.deleted_at IS NULL
         AND wm.user_id = $2
     `,
     [tableId, actor.userId]

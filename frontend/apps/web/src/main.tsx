@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   Table2,
   Trash2,
+  UserPlus,
   UserRound,
   Users
 } from "lucide-react";
@@ -163,6 +164,7 @@ function App() {
   const [filterValue, setFilterValue] = useState("");
   const [sortFieldId, setSortFieldId] = useState("");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [showAdmin, setShowAdmin] = useState(false);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [selectedBaseId, setSelectedBaseId] = useState<string | null>(null);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
@@ -495,6 +497,25 @@ function App() {
     }
   }
 
+  async function createUser(fields: { email: string; password: string; handle: string; displayName: string; canCreateWorkspaces: boolean; canManageUsers: boolean }) {
+    try {
+      const response = await mutate<{ data: UserProfile }>("/api/users", {
+        email: fields.email,
+        password: fields.password,
+        handle: fields.handle,
+        displayName: fields.displayName,
+        canCreateWorkspaces: fields.canCreateWorkspaces,
+        canManageUsers: fields.canManageUsers
+      }, "POST");
+      setUsers((current) => [...current, response.data].sort((a, b) => a.handle.localeCompare(b.handle)));
+      setStatus({ tone: "success", text: `Created @${response.data.handle}` });
+      return response.data;
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+      return undefined;
+    }
+  }
+
   async function saveCell(record: RecordRow, field: Field) {
     if (!selectedTableId || !selectedWorkspaceId) {
       return;
@@ -518,6 +539,93 @@ function App() {
       setRecords(previous);
       setStatus({ tone: "danger", text: errorMessage(error) });
       await loadTableData(selectedTableId);
+    }
+  }
+
+  async function deleteRecord(record: RecordRow) {
+    if (!selectedTableId || !selectedWorkspaceId) {
+      return;
+    }
+    if (!confirm("Delete this record?")) {
+      return;
+    }
+    try {
+      await request(`/api/tables/${selectedTableId}/records/${record.record_id}`, { method: "DELETE" });
+      setRecords((current) => current.filter((row) => row.record_id !== record.record_id));
+      await loadAuditEvents(selectedWorkspaceId);
+      setStatus({ tone: "success", text: "Record deleted" });
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+    }
+  }
+
+  async function deleteBase() {
+    if (!selectedBaseId || !selectedWorkspaceId) {
+      return;
+    }
+    if (!confirm("Delete this base and all its tables?")) {
+      return;
+    }
+    try {
+      await request(`/api/workspaces/${selectedWorkspaceId}/bases/${selectedBaseId}`, { method: "DELETE" });
+      setSelectedBaseId(null);
+      setSelectedTableId(null);
+      setTables([]);
+      setFields([]);
+      setRecords([]);
+      setViews([]);
+      await loadBases(selectedWorkspaceId);
+      await loadAuditEvents(selectedWorkspaceId);
+      setStatus({ tone: "success", text: "Base deleted" });
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+    }
+  }
+
+  async function deleteTable() {
+    if (!selectedBaseId || !selectedTableId || !selectedWorkspaceId) {
+      return;
+    }
+    if (!confirm("Delete this table and all its data?")) {
+      return;
+    }
+    try {
+      await request(`/api/bases/${selectedBaseId}/tables/${selectedTableId}`, { method: "DELETE" });
+      setSelectedTableId(null);
+      setFields([]);
+      setRecords([]);
+      setViews([]);
+      await loadTables(selectedBaseId);
+      await loadAuditEvents(selectedWorkspaceId);
+      setStatus({ tone: "success", text: "Table deleted" });
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+    }
+  }
+
+  async function deleteWorkspace() {
+    if (!selectedWorkspaceId) {
+      return;
+    }
+    if (!confirm("Delete this workspace and all its contents?")) {
+      return;
+    }
+    try {
+      await request(`/api/workspaces/${selectedWorkspaceId}`, { method: "DELETE" });
+      setSelectedWorkspaceId(null);
+      setSelectedBaseId(null);
+      setSelectedTableId(null);
+      setBases([]);
+      setTables([]);
+      setFields([]);
+      setRecords([]);
+      setViews([]);
+      setAuditEvents([]);
+      setMembers([]);
+      await loadWorkspaces();
+      setStatus({ tone: "success", text: "Workspace deleted" });
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
     }
   }
 
@@ -617,6 +725,13 @@ function App() {
           onLogout={logout}
         />
 
+        {profile?.can_manage_users && (
+          <button type="button" className={`command-button ${showAdmin ? "active" : ""}`} onClick={() => setShowAdmin(!showAdmin)}>
+            <ShieldCheck size={16} />
+            Admin
+          </button>
+        )}
+
         <button type="button" className="command-button" onClick={createWorkspace}>
           <Plus size={16} />
           Workspace
@@ -624,14 +739,25 @@ function App() {
 
         <nav className="workspace-list" aria-label="Workspaces">
           {workspaces.map((workspace) => (
-            <button
-              type="button"
-              className={`workspace-item ${workspace.workspace_id === selectedWorkspaceId ? "active" : ""}`}
-              key={workspace.workspace_id}
-              onClick={() => setSelectedWorkspaceId(workspace.workspace_id)}
-            >
-              {workspace.name}
-            </button>
+            <div className="workspace-item-row" key={workspace.workspace_id}>
+              <button
+                type="button"
+                className={`workspace-item ${workspace.workspace_id === selectedWorkspaceId ? "active" : ""}`}
+                onClick={() => setSelectedWorkspaceId(workspace.workspace_id)}
+              >
+                {workspace.name}
+              </button>
+              {workspace.workspace_id === selectedWorkspaceId && (
+                <button
+                  type="button"
+                  className="icon-button danger"
+                  onClick={() => void deleteWorkspace()}
+                  aria-label={`Delete workspace ${workspace.name}`}
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </div>
           ))}
         </nav>
       </aside>
@@ -654,130 +780,153 @@ function App() {
           </div>
         </header>
 
-        <div className="object-bar">
-          <Selector
-            icon={<Database size={15} />}
-            label="Base"
-            value={selectedBaseId ?? ""}
-            options={bases.map((base) => ({ value: base.base_id, label: base.name }))}
-            onChange={setSelectedBaseId}
-          />
-          <button type="button" className="small-button" onClick={createBase}>
-            <FolderPlus size={15} />
-            Base
-          </button>
-          <Selector
-            icon={<Table2 size={15} />}
-            label="Table"
-            value={selectedTableId ?? ""}
-            options={tables.map((table) => ({ value: table.table_id, label: table.name }))}
-            onChange={setSelectedTableId}
-          />
-          <button type="button" className="small-button" onClick={createTable}>
-            <Grid3X3 size={15} />
-            Table
-          </button>
-          <button type="button" className="small-button" onClick={() => addField("short_text")}>
-            <Plus size={15} />
-            Text
-          </button>
-          <button type="button" className="small-button" onClick={() => addField("currency")}>
-            <Plus size={15} />
-            Currency
-          </button>
-          <button type="button" className="small-button" onClick={addRecord}>
-            <Plus size={15} />
-            Record
-          </button>
-          <Selector
-            icon={<RefreshCcw size={15} />}
-            label="Filter"
-            value={filterFieldId}
-            options={visibleFields.map((field) => ({ value: field.field_id, label: field.name }))}
-            onChange={setFilterFieldId}
-          />
-          <input
-            className="toolbar-input"
-            placeholder="Contains"
-            value={filterValue}
-            onChange={(event) => setFilterValue(event.target.value)}
-          />
-          <Selector
-            icon={<RefreshCcw size={15} />}
-            label="Sort"
-            value={sortFieldId}
-            options={visibleFields.map((field) => ({ value: field.field_id, label: field.name }))}
-            onChange={setSortFieldId}
-          />
-          <select className="role-select compact-select" value={sortDirection} onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")}>
-            <option value="asc">Asc</option>
-            <option value="desc">Desc</option>
-          </select>
-          <button type="button" className="small-button" onClick={createFieldGroup}>
-            <Layers3 size={15} />
-            Group
-          </button>
-          <button type="button" className="small-button" onClick={createSavedView}>
-            <Save size={15} />
-            View
-          </button>
-        </div>
-
-        <div className="view-tabs" role="tablist" aria-label="Saved views">
-          <button type="button" role="tab" aria-selected="true">
-            All records
-          </button>
-          {views.map((view) => (
-            <button type="button" role="tab" aria-selected="false" key={view.saved_view_id}>
-              {view.name}
-            </button>
-          ))}
-        </div>
-
-        <section className="content-grid">
-          {workspaces.length === 0 ? (
-            <div className="empty-state workspace-empty">
-              <Database size={24} />
-              <strong>No workspaces yet</strong>
-              <span>You need create permission before you can add a workspace.</span>
-              <button type="button" className="small-button primary" onClick={createWorkspace}>
-                <Plus size={15} />
-                Workspace
-              </button>
-            </div>
-          ) : (
-            <DataGrid
-              fields={visibleFields}
-              records={records}
-              editingCell={editingCell}
-              draftValue={draftValue}
-              onDraftChange={setDraftValue}
-              onStartEdit={(record, field) => {
-                setEditingCell({ recordId: record.record_id, fieldId: field.field_id });
-                setDraftValue(String(record[field.physical_column_name] ?? ""));
-              }}
-              onCancelEdit={() => setEditingCell(null)}
-              onSaveCell={saveCell}
-            />
-          )}
-
-          <RightRail
+        {showAdmin ? (
+          <AdminPanel
             currentUser={currentUser}
             profile={profile}
             users={users}
-            members={members}
             auditEvents={auditEvents}
-            directUserId={directUserId}
-            directRole={directRole}
-            onDirectUserIdChange={setDirectUserId}
-            onDirectRoleChange={setDirectRole}
-            onAddDirectMember={addDirectMember}
-            onChangeRole={changeMemberRole}
-            onRemoveMember={removeMember}
             onChangeUserPermissions={changeUserPermissions}
             onRemoveUser={removeUser}
+            onCreateUser={createUser}
           />
-        </section>
+        ) : (
+          <>
+            <div className="object-bar">
+              <Selector
+                icon={<Database size={15} />}
+                label="Base"
+                value={selectedBaseId ?? ""}
+                options={bases.map((base) => ({ value: base.base_id, label: base.name }))}
+                onChange={setSelectedBaseId}
+              />
+              <button type="button" className="small-button" onClick={createBase}>
+                <FolderPlus size={15} />
+                Base
+              </button>
+              {selectedBaseId && (
+                <button type="button" className="small-button danger" onClick={() => void deleteBase()}>
+                  <Trash2 size={15} />
+                  Delete base
+                </button>
+              )}
+              <Selector
+                icon={<Table2 size={15} />}
+                label="Table"
+                value={selectedTableId ?? ""}
+                options={tables.map((table) => ({ value: table.table_id, label: table.name }))}
+                onChange={setSelectedTableId}
+              />
+              <button type="button" className="small-button" onClick={createTable}>
+                <Grid3X3 size={15} />
+                Table
+              </button>
+              {selectedTableId && (
+                <button type="button" className="small-button danger" onClick={() => void deleteTable()}>
+                  <Trash2 size={15} />
+                  Delete table
+                </button>
+              )}
+              <button type="button" className="small-button" onClick={() => addField("short_text")}>
+                <Plus size={15} />
+                Text
+              </button>
+              <button type="button" className="small-button" onClick={() => addField("currency")}>
+                <Plus size={15} />
+                Currency
+              </button>
+              <button type="button" className="small-button" onClick={addRecord}>
+                <Plus size={15} />
+                Record
+              </button>
+              <Selector
+                icon={<RefreshCcw size={15} />}
+                label="Filter"
+                value={filterFieldId}
+                options={visibleFields.map((field) => ({ value: field.field_id, label: field.name }))}
+                onChange={setFilterFieldId}
+              />
+              <input
+                className="toolbar-input"
+                placeholder="Contains"
+                value={filterValue}
+                onChange={(event) => setFilterValue(event.target.value)}
+              />
+              <Selector
+                icon={<RefreshCcw size={15} />}
+                label="Sort"
+                value={sortFieldId}
+                options={visibleFields.map((field) => ({ value: field.field_id, label: field.name }))}
+                onChange={setSortFieldId}
+              />
+              <select className="role-select compact-select" value={sortDirection} onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")}>
+                <option value="asc">Asc</option>
+                <option value="desc">Desc</option>
+              </select>
+              <button type="button" className="small-button" onClick={createFieldGroup}>
+                <Layers3 size={15} />
+                Group
+              </button>
+              <button type="button" className="small-button" onClick={createSavedView}>
+                <Save size={15} />
+                View
+              </button>
+            </div>
+
+            <div className="view-tabs" role="tablist" aria-label="Saved views">
+              <button type="button" role="tab" aria-selected="true">
+                All records
+              </button>
+              {views.map((view) => (
+                <button type="button" role="tab" aria-selected="false" key={view.saved_view_id}>
+                  {view.name}
+                </button>
+              ))}
+            </div>
+
+            <section className="content-grid">
+              {workspaces.length === 0 ? (
+                <div className="empty-state workspace-empty">
+                  <Database size={24} />
+                  <strong>No workspaces yet</strong>
+                  <span>You need create permission before you can add a workspace.</span>
+                  <button type="button" className="small-button primary" onClick={createWorkspace}>
+                    <Plus size={15} />
+                    Workspace
+                  </button>
+                </div>
+              ) : (
+                <DataGrid
+                  fields={visibleFields}
+                  records={records}
+                  editingCell={editingCell}
+                  draftValue={draftValue}
+                  onDraftChange={setDraftValue}
+                  onStartEdit={(record, field) => {
+                    setEditingCell({ recordId: record.record_id, fieldId: field.field_id });
+                    setDraftValue(String(record[field.physical_column_name] ?? ""));
+                  }}
+                  onCancelEdit={() => setEditingCell(null)}
+                  onSaveCell={saveCell}
+                  onDeleteRecord={deleteRecord}
+                />
+              )}
+
+              <RightRail
+                currentUser={currentUser}
+                profile={profile}
+                members={members}
+                directUserId={directUserId}
+                directRole={directRole}
+                onDirectUserIdChange={setDirectUserId}
+                onDirectRoleChange={setDirectRole}
+                onAddDirectMember={addDirectMember}
+                onChangeRole={changeMemberRole}
+                onRemoveMember={removeMember}
+              />
+            </section>
+          </>
+        )}
 
         <footer className={`status-bar ${status.tone}`} aria-live="polite">
           {loading ? "Loading" : status.text}
@@ -1015,9 +1164,7 @@ function AccountBlock(props: {
 function RightRail(props: {
   currentUser: AuthUser;
   profile: UserProfile | null;
-  users: UserProfile[];
   members: WorkspaceMember[];
-  auditEvents: AuditEvent[];
   directUserId: string;
   directRole: WorkspaceRole;
   onDirectUserIdChange: (value: string) => void;
@@ -1025,15 +1172,13 @@ function RightRail(props: {
   onAddDirectMember: () => Promise<void>;
   onChangeRole: (member: WorkspaceMember, role: WorkspaceRole) => Promise<void>;
   onRemoveMember: (member: WorkspaceMember) => Promise<void>;
-  onChangeUserPermissions: (user: UserProfile, patch: Partial<Pick<UserProfile, "can_create_workspaces" | "can_manage_users">>) => Promise<void>;
-  onRemoveUser: (user: UserProfile) => Promise<void>;
 }) {
   return (
-    <aside className="right-rail" aria-label="Workspace administration">
+    <aside className="right-rail" aria-label="Workspace members">
       <section className="admin-panel">
         <div className="panel-heading">
           <ShieldCheck size={16} />
-          <span>RBAC</span>
+          <span>Workspace members</span>
         </div>
 
         <div className="admin-section">
@@ -1075,67 +1220,113 @@ function RightRail(props: {
         </div>
 
       </section>
-
-      <section className="audit-panel" aria-label="Audit log">
-        <div className="panel-heading">
-          <History size={16} />
-          <span>Audit</span>
-        </div>
-        <div className="audit-list">
-          {props.auditEvents.map((event) => (
-            <div className="audit-item" key={event.event_id}>
-              <strong>{event.action}</strong>
-              <span>{event.entity_type}</span>
-              <time>{new Date(event.occurred_at).toLocaleTimeString()}</time>
-            </div>
-          ))}
-        </div>
-
-        <div className="admin-section">
-          <div className="panel-heading inline-heading">
-            <Users size={15} />
-            <span>Users</span>
-          </div>
-          <div className="user-list">
-            {props.users.map((user) => (
-              <div className="user-row" key={user.user_id}>
-                <div>
-                  <strong>@{user.handle}</strong>
-                  <span>{user.can_create_workspaces ? "Can create" : "Shared only"}</span>
-                </div>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={user.can_create_workspaces}
-                    disabled={!props.profile?.can_manage_users}
-                    onChange={(event) => void props.onChangeUserPermissions(user, { can_create_workspaces: event.target.checked })}
-                  />
-                  Create
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={user.can_manage_users}
-                    disabled={!props.profile?.can_manage_users}
-                    onChange={(event) => void props.onChangeUserPermissions(user, { can_manage_users: event.target.checked })}
-                  />
-                  Manage
-                </label>
-                <button
-                  type="button"
-                  className="icon-button danger"
-                  disabled={!props.profile?.can_manage_users || user.user_id === props.currentUser.id}
-                  onClick={() => void props.onRemoveUser(user)}
-                  aria-label={`Disable ${user.handle}`}
-                >
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
     </aside>
+  );
+}
+
+function AdminPanel(props: {
+  currentUser: AuthUser;
+  profile: UserProfile | null;
+  users: UserProfile[];
+  auditEvents: AuditEvent[];
+  onChangeUserPermissions: (user: UserProfile, patch: Partial<Pick<UserProfile, "can_create_workspaces" | "can_manage_users">>) => Promise<void>;
+  onRemoveUser: (user: UserProfile) => Promise<void>;
+  onCreateUser: (fields: { email: string; password: string; handle: string; displayName: string; canCreateWorkspaces: boolean; canManageUsers: boolean }) => Promise<UserProfile | undefined>;
+}) {
+  const [tab, setTab] = useState<"users" | "audit">("users");
+
+  return (
+    <section className="admin-page">
+      <div className="admin-page-header">
+        <ShieldCheck size={20} />
+        <h2>Administration</h2>
+      </div>
+      <div className="admin-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected={tab === "users"} className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>
+          <Users size={15} />
+          Users
+        </button>
+        <button type="button" role="tab" aria-selected={tab === "audit"} className={tab === "audit" ? "active" : ""} onClick={() => setTab("audit")}>
+          <History size={15} />
+          Audit log
+        </button>
+      </div>
+
+      {tab === "users" && (
+        <div className="admin-page-content">
+          <CreateUserForm onCreateUser={props.onCreateUser} />
+
+          <div className="admin-section">
+            <div className="panel-heading inline-heading">
+              <Users size={15} />
+              <span>User directory</span>
+              <span className="badge">{props.users.length}</span>
+            </div>
+            <div className="user-directory">
+              {props.users.map((user) => (
+                <div className="user-row" key={user.user_id}>
+                  <div className="user-info">
+                    <strong>@{user.handle}</strong>
+                    <span>{user.display_name}</span>
+                    {user.user_id === props.currentUser.id && <span className="badge">You</span>}
+                  </div>
+                  <div className="user-actions">
+                    <label className="user-perm">
+                      <input
+                        type="checkbox"
+                        checked={user.can_create_workspaces}
+                        disabled={!props.profile?.can_manage_users}
+                        onChange={(event) => void props.onChangeUserPermissions(user, { can_create_workspaces: event.target.checked })}
+                      />
+                      Create
+                    </label>
+                    <label className="user-perm">
+                      <input
+                        type="checkbox"
+                        checked={user.can_manage_users}
+                        disabled={!props.profile?.can_manage_users}
+                        onChange={(event) => void props.onChangeUserPermissions(user, { can_manage_users: event.target.checked })}
+                      />
+                      Manage
+                    </label>
+                    <button
+                      type="button"
+                      className="icon-button danger"
+                      disabled={!props.profile?.can_manage_users || user.user_id === props.currentUser.id}
+                      onClick={() => void props.onRemoveUser(user)}
+                      aria-label={`Disable ${user.handle}`}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === "audit" && (
+        <div className="admin-page-content">
+          <div className="admin-section">
+            <div className="panel-heading inline-heading">
+              <History size={15} />
+              <span>Recent activity</span>
+            </div>
+            <div className="audit-full-list">
+              {props.auditEvents.map((event) => (
+                <div className="audit-row" key={event.event_id}>
+                  <strong>{event.action}</strong>
+                  <span>{event.entity_type}</span>
+                  <time>{new Date(event.occurred_at).toLocaleString()}</time>
+                </div>
+              ))}
+              {props.auditEvents.length === 0 && <p className="empty-text">No audit events yet.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -1149,6 +1340,75 @@ function RoleSelect(props: { value: WorkspaceRole; onChange: (value: WorkspaceRo
   );
 }
 
+function CreateUserForm(props: {
+  onCreateUser: (fields: { email: string; password: string; handle: string; displayName: string; canCreateWorkspaces: boolean; canManageUsers: boolean }) => Promise<UserProfile | undefined>;
+}) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [handle, setHandle] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [canCreateWorkspaces, setCanCreateWorkspaces] = useState(false);
+  const [canManageUsers, setCanManageUsers] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setSubmitting(true);
+    const result = await props.onCreateUser({
+      email: email.trim(),
+      password,
+      handle: handle.trim() || email.trim().split("@")[0] || "",
+      displayName: displayName.trim() || email.trim().split("@")[0] || "",
+      canCreateWorkspaces,
+      canManageUsers
+    });
+    setSubmitting(false);
+    if (result) {
+      setEmail("");
+      setPassword("");
+      setHandle("");
+      setDisplayName("");
+      setCanCreateWorkspaces(false);
+      setCanManageUsers(false);
+    }
+  }
+
+  return (
+    <form className="create-user-form" onSubmit={(event) => void submit(event)}>
+      <label className="stacked-field">
+        <span>Email</span>
+        <input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
+      </label>
+      <label className="stacked-field">
+        <span>Password</span>
+        <input type="password" required minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} />
+      </label>
+      <label className="stacked-field">
+        <span>Handle</span>
+        <input value={handle} placeholder={email.trim().split("@")[0] || "auto from email"} onChange={(event) => setHandle(event.target.value)} />
+      </label>
+      <label className="stacked-field">
+        <span>Display name</span>
+        <input value={displayName} placeholder={email.trim().split("@")[0] || "auto from email"} onChange={(event) => setDisplayName(event.target.value)} />
+      </label>
+      <div className="inline-form">
+        <label>
+          <input type="checkbox" checked={canCreateWorkspaces} onChange={(event) => setCanCreateWorkspaces(event.target.checked)} />
+          Create workspaces
+        </label>
+        <label>
+          <input type="checkbox" checked={canManageUsers} onChange={(event) => setCanManageUsers(event.target.checked)} />
+          Manage users
+        </label>
+      </div>
+      <button type="submit" className="small-button" disabled={submitting || !email.trim() || !password}>
+        <UserPlus size={15} />
+        {submitting ? "Creating" : "Create account"}
+      </button>
+    </form>
+  );
+}
+
 function DataGrid(props: {
   fields: Field[];
   records: RecordRow[];
@@ -1158,8 +1418,10 @@ function DataGrid(props: {
   onStartEdit: (record: RecordRow, field: Field) => void;
   onCancelEdit: () => void;
   onSaveCell: (record: RecordRow, field: Field) => Promise<void>;
+  onDeleteRecord: (record: RecordRow) => void;
 }) {
   const parentRef = useRef<HTMLDivElement | null>(null);
+  const deleteColumnWidth = 40;
   const rowVirtualizer = useVirtualizer({
     count: props.records.length,
     getScrollElement: () => parentRef.current,
@@ -1176,7 +1438,7 @@ function DataGrid(props: {
 
   const virtualRows = rowVirtualizer.getVirtualItems();
   const virtualColumns = columnVirtualizer.getVirtualItems();
-  const totalWidth = columnVirtualizer.getTotalSize();
+  const totalWidth = columnVirtualizer.getTotalSize() + deleteColumnWidth;
   const totalHeight = rowVirtualizer.getTotalSize();
 
   if (props.fields.length === 0) {
@@ -1208,6 +1470,10 @@ function DataGrid(props: {
               </div>
             );
           })}
+          <div
+            className="grid-header-cell"
+            style={{ left: totalWidth - deleteColumnWidth, width: deleteColumnWidth }}
+          />
         </div>
         <div className="grid-body" style={{ width: totalWidth, height: totalHeight }}>
           {virtualRows.map((virtualRow) => {
@@ -1258,6 +1524,19 @@ function DataGrid(props: {
                     </div>
                   );
                 })}
+                <div
+                  className="grid-cell-wrap"
+                  style={{ left: totalWidth - deleteColumnWidth, width: deleteColumnWidth }}
+                >
+                  <button
+                    type="button"
+                    className="icon-button danger"
+                    onClick={() => props.onDeleteRecord(record)}
+                    aria-label="Delete record"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
             );
           })}

@@ -14,7 +14,7 @@ export function registerWorkspaceRoutes(app: FastifyInstance<any, any, any, any,
           SELECT w.workspace_id, w.name, wm.role, w.created_at, w.updated_at, w.row_version
           FROM app.workspaces w
           JOIN app.workspace_members wm ON wm.workspace_id = w.workspace_id
-          WHERE wm.user_id = $1
+          WHERE wm.user_id = $1 AND w.deleted_at IS NULL
           ORDER BY w.updated_at DESC, w.workspace_id DESC
         `,
         [actor.userId]
@@ -81,13 +81,55 @@ export function registerWorkspaceRoutes(app: FastifyInstance<any, any, any, any,
         `
           SELECT workspace_id, name, created_at, updated_at, row_version
           FROM app.workspaces
-          WHERE workspace_id = $1
+          WHERE workspace_id = $1 AND deleted_at IS NULL
         `,
         [workspaceId]
       );
       return sendOk(result.rows[0]);
     } catch (error) {
       return mapError(request, reply, error);
+    }
+  });
+
+  app.delete("/api/workspaces/:workspaceId", async (request, reply) => {
+    const client = await pool.connect();
+    try {
+      const actor = await requireActor(request);
+      const workspaceId = readUuidParam(request.params, "workspaceId");
+      await authorizeWorkspace(actor, workspaceId, { resource: "workspace", action: "delete" });
+
+      await client.query("BEGIN");
+      await client.query(
+        "UPDATE app.tables SET deleted_at = now(), updated_at = now(), updated_by = $2, row_version = row_version + 1 WHERE base_id IN (SELECT base_id FROM app.bases WHERE workspace_id = $1) AND deleted_at IS NULL",
+        [workspaceId, actor.userId]
+      );
+      await client.query(
+        "UPDATE app.bases SET deleted_at = now(), updated_at = now(), updated_by = $2, row_version = row_version + 1 WHERE workspace_id = $1 AND deleted_at IS NULL",
+        [workspaceId, actor.userId]
+      );
+      await client.query(
+        "UPDATE app.workspaces SET deleted_at = now(), updated_at = now(), updated_by = $2, row_version = row_version + 1 WHERE workspace_id = $1 AND deleted_at IS NULL",
+        [workspaceId, actor.userId]
+      );
+      await client.query("COMMIT");
+
+      await writeAuditEvent({
+        workspaceId,
+        actorUserId: actor.userId,
+        action: "workspace.delete",
+        entityType: "workspace",
+        entityId: workspaceId,
+        requestId: request.id,
+        outcome: "success",
+        metadata: {}
+      });
+
+      return reply.status(204).send();
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      return mapError(request, reply, error);
+    } finally {
+      client.release();
     }
   });
 }

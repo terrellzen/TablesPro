@@ -4,7 +4,7 @@ import { pool } from "../db/pool.js";
 import { authorizeBase, authorizeTable, requireActor } from "./authz.js";
 import { writeAuditEvent } from "./audit.js";
 import { fieldTypeToSql, parseFieldType } from "./field-types.js";
-import { mapError, readBodyObject, readRequiredString, readUuidParam, requireReturnedRow, sendCreated, sendOk } from "./http.js";
+import { mapError, readBodyObject, readRequiredString, readUuidParam, requireReturnedRow, sendCreated, sendOk, HttpError } from "./http.js";
 
 export function registerTableRoutes(app: FastifyInstance<any, any, any, any, any>): void {
   app.get("/api/bases/:baseId/tables", async (request, reply) => {
@@ -164,6 +164,47 @@ export function registerTableRoutes(app: FastifyInstance<any, any, any, any, any
         physicalColumnName,
         position: field.position
       });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      return mapError(request, reply, error);
+    } finally {
+      client.release();
+    }
+  });
+
+  app.delete("/api/bases/:baseId/tables/:tableId", async (request, reply) => {
+    const client = await pool.connect();
+    try {
+      const actor = await requireActor(request);
+      const baseId = readUuidParam(request.params, "baseId");
+      const tableId = readUuidParam(request.params, "tableId");
+      const { workspaceId } = await authorizeTable(actor, tableId, { resource: "table", action: "delete" });
+
+      const baseCheck = await pool.query("SELECT base_id FROM app.tables WHERE table_id = $1 AND base_id = $2", [tableId, baseId]);
+      if (baseCheck.rows.length === 0) {
+        throw new HttpError(404, "NOT_FOUND", "Table not found in this base");
+      }
+
+      await client.query("BEGIN");
+      await client.query(
+        "UPDATE app.tables SET deleted_at = now(), updated_at = now(), updated_by = $2, row_version = row_version + 1 WHERE table_id = $1 AND deleted_at IS NULL",
+        [tableId, actor.userId]
+      );
+      await client.query(`DROP TABLE IF EXISTS ${quoteAppDataTable(tableId)}`);
+      await client.query("COMMIT");
+
+      await writeAuditEvent({
+        workspaceId,
+        actorUserId: actor.userId,
+        action: "table.delete",
+        entityType: "table",
+        entityId: tableId,
+        requestId: request.id,
+        outcome: "success",
+        metadata: { baseId }
+      });
+
+      return reply.status(204).send();
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       return mapError(request, reply, error);

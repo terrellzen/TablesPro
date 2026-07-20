@@ -2,7 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { pool } from "../db/pool.js";
 import { authorizeBase, authorizeWorkspace, requireActor } from "./authz.js";
 import { writeAuditEvent } from "./audit.js";
-import { mapError, readBodyObject, readRequiredString, readUuidParam, sendCreated, sendOk } from "./http.js";
+import { mapError, readBodyObject, readRequiredString, readUuidParam, sendCreated, sendOk, HttpError } from "./http.js";
+import { quoteAppDataTable } from "@tablespro/database";
 
 export function registerBaseRoutes(app: FastifyInstance<any, any, any, any, any>): void {
   app.get("/api/workspaces/:workspaceId/bases", async (request, reply) => {
@@ -14,7 +15,7 @@ export function registerBaseRoutes(app: FastifyInstance<any, any, any, any, any>
         `
           SELECT base_id, workspace_id, name, created_at, updated_at, row_version
           FROM app.bases
-          WHERE workspace_id = $1
+          WHERE workspace_id = $1 AND deleted_at IS NULL
           ORDER BY updated_at DESC, base_id DESC
         `,
         [workspaceId]
@@ -66,13 +67,57 @@ export function registerBaseRoutes(app: FastifyInstance<any, any, any, any, any>
         `
           SELECT base_id, workspace_id, name, created_at, updated_at, row_version
           FROM app.bases
-          WHERE base_id = $1
+          WHERE base_id = $1 AND deleted_at IS NULL
         `,
         [baseId]
       );
       return sendOk(result.rows[0]);
     } catch (error) {
       return mapError(request, reply, error);
+    }
+  });
+
+  app.delete("/api/workspaces/:workspaceId/bases/:baseId", async (request, reply) => {
+    const client = await pool.connect();
+    try {
+      const actor = await requireActor(request);
+      const workspaceId = readUuidParam(request.params, "workspaceId");
+      const baseId = readUuidParam(request.params, "baseId");
+      await authorizeBase(actor, baseId, { resource: "base", action: "delete" });
+
+      const wsCheck = await pool.query("SELECT base_id FROM app.bases WHERE base_id = $1 AND workspace_id = $2", [baseId, workspaceId]);
+      if (wsCheck.rows.length === 0) {
+        throw new HttpError(404, "NOT_FOUND", "Base not found in this workspace");
+      }
+
+      await client.query("BEGIN");
+      await client.query(
+        "UPDATE app.tables SET deleted_at = now(), updated_at = now(), updated_by = $2, row_version = row_version + 1 WHERE base_id = $1 AND deleted_at IS NULL",
+        [baseId, actor.userId]
+      );
+      await client.query(
+        "UPDATE app.bases SET deleted_at = now(), updated_at = now(), updated_by = $2, row_version = row_version + 1 WHERE base_id = $1 AND deleted_at IS NULL",
+        [baseId, actor.userId]
+      );
+      await client.query("COMMIT");
+
+      await writeAuditEvent({
+        workspaceId,
+        actorUserId: actor.userId,
+        action: "base.delete",
+        entityType: "base",
+        entityId: baseId,
+        requestId: request.id,
+        outcome: "success",
+        metadata: {}
+      });
+
+      return reply.status(204).send();
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      return mapError(request, reply, error);
+    } finally {
+      client.release();
     }
   });
 }
