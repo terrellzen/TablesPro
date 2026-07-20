@@ -11,9 +11,11 @@ import {
   Layers3,
   LogIn,
   LogOut,
+  Pencil,
   Plus,
   RefreshCcw,
   Save,
+  Search,
   ShieldCheck,
   Table2,
   Trash2,
@@ -165,6 +167,7 @@ function App() {
   const [filterValue, setFilterValue] = useState("");
   const [sortFieldId, setSortFieldId] = useState("");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [searchValue, setSearchValue] = useState("");
   const [showAdmin, setShowAdmin] = useState(false);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [selectedBaseId, setSelectedBaseId] = useState<string | null>(null);
@@ -173,19 +176,29 @@ function App() {
   const [draftValue, setDraftValue] = useState("");
   const [status, setStatus] = useState<Status>({ tone: "idle", text: "Ready" });
   const [loading, setLoading] = useState(false);
-  const [renamingEntity, setRenamingEntity] = useState<{
-    type: "workspace" | "base" | "table" | "field";
-    id: string;
+  const [modalEntity, setModalEntity] = useState<{
+    mode: "rename" | "create";
+    type: "workspace" | "base" | "table" | "field" | "view" | "fieldGroup";
+    id?: string;
     parentId?: string;
-    name: string;
+    fieldType?: FieldType;
+    name?: string;
   } | null>(null);
-  const [renameValue, setRenameValue] = useState("");
+  const [modalValue, setModalValue] = useState("");
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: { label: string; onClick: () => void }[] } | null>(null);
 
   const selectedWorkspace = workspaces.find((workspace) => workspace.workspace_id === selectedWorkspaceId) ?? null;
   const selectedBase = bases.find((base) => base.base_id === selectedBaseId) ?? null;
   const selectedTable = tables.find((table) => table.table_id === selectedTableId) ?? null;
   const visibleFields = fields.filter((field) => !field.hidden);
+
+  const searchedRecords = useMemo(() => {
+    if (!searchValue.trim()) return records;
+    const term = searchValue.trim().toLowerCase();
+    return records.filter((record) =>
+      visibleFields.some((field) => String(record[field.physical_column_name] ?? "").toLowerCase().includes(term))
+    );
+  }, [records, visibleFields, searchValue]);
 
   const loadAppConfig = useCallback(async () => {
     try {
@@ -304,6 +317,7 @@ function App() {
       setAuditEvents([]);
       setMembers([]);
       setUsers([]);
+      setSearchValue("");
       return;
     }
     Promise.all([loadBases(selectedWorkspaceId), loadAuditEvents(selectedWorkspaceId), loadAdminData(selectedWorkspaceId)]).catch((error) =>
@@ -324,6 +338,7 @@ function App() {
       setFields([]);
       setRecords([]);
       setViews([]);
+      setSearchValue("");
       return;
     }
     loadTableData(selectedTableId).catch((error) => setStatus({ tone: "danger", text: errorMessage(error) }));
@@ -334,54 +349,32 @@ function App() {
       setStatus({ tone: "danger", text: "You do not have permission to create workspaces" });
       return;
     }
-    const name = prompt("Workspace name");
-    if (!name) {
-      return;
-    }
-    const response = await mutate<{ data: Workspace }>("/api/workspaces", { name });
-    setSelectedWorkspaceId(response.data.workspace_id);
-    await loadWorkspaces();
+    setModalEntity({ mode: "create", type: "workspace" });
+    setModalValue("");
   }
 
   async function createBase() {
     if (!selectedWorkspaceId) {
       return;
     }
-    const name = prompt("Base name");
-    if (!name) {
-      return;
-    }
-    const response = await mutate<{ data: Base }>(`/api/workspaces/${selectedWorkspaceId}/bases`, { name });
-    setSelectedBaseId(response.data.base_id);
-    await loadBases(selectedWorkspaceId);
-    await loadAuditEvents(selectedWorkspaceId);
+    setModalEntity({ mode: "create", type: "base" });
+    setModalValue("");
   }
 
   async function createTable() {
     if (!selectedBaseId || !selectedWorkspaceId) {
       return;
     }
-    const name = prompt("Table name");
-    if (!name) {
-      return;
-    }
-    const response = await mutate<{ data: { tableId: string } }>(`/api/bases/${selectedBaseId}/tables`, { name });
-    setSelectedTableId(response.data.tableId);
-    await loadTables(selectedBaseId);
-    await loadAuditEvents(selectedWorkspaceId);
+    setModalEntity({ mode: "create", type: "table" });
+    setModalValue("");
   }
 
   async function addField(fieldType: FieldType) {
     if (!selectedTableId || !selectedWorkspaceId) {
       return;
     }
-    const name = prompt("Field name");
-    if (!name) {
-      return;
-    }
-    await mutate(`/api/tables/${selectedTableId}/fields`, { name, fieldType });
-    await loadTableData(selectedTableId);
-    await loadAuditEvents(selectedWorkspaceId);
+    setModalEntity({ mode: "create", type: "field", fieldType, parentId: selectedTableId });
+    setModalValue("");
   }
 
   async function addRecord() {
@@ -395,14 +388,37 @@ function App() {
     await loadAuditEvents(selectedWorkspaceId);
   }
 
-  async function createSavedView() {
-    if (!selectedTableId || !selectedWorkspaceId) {
-      return;
-    }
-    const name = prompt("View name");
-    if (!name) {
-      return;
-    }
+  async function createWorkspaceWithName(name: string) {
+    const response = await mutate<{ data: Workspace }>("/api/workspaces", { name });
+    setSelectedWorkspaceId(response.data.workspace_id);
+    await loadWorkspaces();
+  }
+
+  async function createBaseWithName(name: string) {
+    if (!selectedWorkspaceId) return;
+    const response = await mutate<{ data: Base }>(`/api/workspaces/${selectedWorkspaceId}/bases`, { name });
+    setSelectedBaseId(response.data.base_id);
+    await loadBases(selectedWorkspaceId);
+    await loadAuditEvents(selectedWorkspaceId);
+  }
+
+  async function createTableWithName(name: string) {
+    if (!selectedBaseId || !selectedWorkspaceId) return;
+    const response = await mutate<{ data: { tableId: string } }>(`/api/bases/${selectedBaseId}/tables`, { name });
+    setSelectedTableId(response.data.tableId);
+    await loadTables(selectedBaseId);
+    await loadAuditEvents(selectedWorkspaceId);
+  }
+
+  async function createFieldWithName(name: string, fieldType: FieldType, tableId: string) {
+    if (!selectedWorkspaceId) return;
+    await mutate(`/api/tables/${tableId}/fields`, { name, fieldType });
+    await loadTableData(tableId);
+    await loadAuditEvents(selectedWorkspaceId);
+  }
+
+  async function createViewWithName(name: string) {
+    if (!selectedTableId || !selectedWorkspaceId) return;
     await mutate(`/api/tables/${selectedTableId}/views`, {
       name,
       isShared: true,
@@ -413,17 +429,27 @@ function App() {
     await loadAuditEvents(selectedWorkspaceId);
   }
 
+  async function createFieldGroupWithName(name: string) {
+    if (!selectedTableId || !selectedWorkspaceId) return;
+    await mutate(`/api/tables/${selectedTableId}/field-groups`, { name });
+    await loadAuditEvents(selectedWorkspaceId);
+    setStatus({ tone: "success", text: "Column group created" });
+  }
+
+  async function createSavedView() {
+    if (!selectedTableId || !selectedWorkspaceId) {
+      return;
+    }
+    setModalEntity({ mode: "create", type: "view" });
+    setModalValue("");
+  }
+
   async function createFieldGroup() {
     if (!selectedTableId || !selectedWorkspaceId) {
       return;
     }
-    const name = prompt("Column group name");
-    if (!name) {
-      return;
-    }
-    await mutate(`/api/tables/${selectedTableId}/field-groups`, { name });
-    await loadAuditEvents(selectedWorkspaceId);
-    setStatus({ tone: "success", text: "Column group created" });
+    setModalEntity({ mode: "create", type: "fieldGroup" });
+    setModalValue("");
   }
 
   async function exportCsv() {
@@ -705,29 +731,54 @@ function App() {
   }
 
   function openRenameModal(type: "workspace" | "base" | "table" | "field", id: string, name: string, parentId?: string) {
-    setRenamingEntity(parentId !== undefined ? { type, id, parentId, name } : { type, id, name });
-    setRenameValue(name);
+    setModalEntity(parentId !== undefined ? { mode: "rename", type, id, parentId, name } : { mode: "rename", type, id, name });
+    setModalValue(name);
     setContextMenu(null);
   }
 
-  function confirmRename() {
-    if (!renamingEntity || !renameValue.trim()) return;
-    const { type, id, parentId } = renamingEntity;
-    switch (type) {
-      case "workspace":
-        void renameWorkspace(id, renameValue);
-        break;
-      case "base":
-        void renameBase(id, renameValue);
-        break;
-      case "table":
-        void renameTable(id, renameValue);
-        break;
-      case "field":
-        void renameField(parentId!, id, renameValue);
-        break;
+  function confirmModal() {
+    if (!modalEntity || !modalValue.trim()) return;
+
+    if (modalEntity.mode === "rename") {
+      const { type, id, parentId } = modalEntity;
+      switch (type) {
+        case "workspace":
+          void renameWorkspace(id!, modalValue);
+          break;
+        case "base":
+          void renameBase(id!, modalValue);
+          break;
+        case "table":
+          void renameTable(id!, modalValue);
+          break;
+        case "field":
+          void renameField(parentId!, id!, modalValue);
+          break;
+      }
+    } else {
+      const { type, fieldType, parentId } = modalEntity;
+      switch (type) {
+        case "workspace":
+          void createWorkspaceWithName(modalValue);
+          break;
+        case "base":
+          void createBaseWithName(modalValue);
+          break;
+        case "table":
+          void createTableWithName(modalValue);
+          break;
+        case "field":
+          void createFieldWithName(modalValue, fieldType!, parentId!);
+          break;
+        case "view":
+          void createViewWithName(modalValue);
+          break;
+        case "fieldGroup":
+          void createFieldGroupWithName(modalValue);
+          break;
+      }
     }
-    setRenamingEntity(null);
+    setModalEntity(null);
   }
 
   async function handleAuthenticated() {
@@ -971,23 +1022,22 @@ function App() {
                   {selectedBaseId && (
                     <button
                       type="button"
-                      className="small-button"
+                      className="icon-button"
+                      title="Rename base"
                       onClick={() => {
                         const base = bases.find((b) => b.base_id === selectedBaseId);
                         if (base) openRenameModal("base", base.base_id, base.name);
                       }}
                     >
-                      Rename base
+                      <Pencil size={15} />
                     </button>
                   )}
-                  <button type="button" className="small-button" onClick={createBase}>
+                  <button type="button" className="icon-button" title="Create base" onClick={createBase}>
                     <FolderPlus size={15} />
-                    Base
                   </button>
                   {selectedBaseId && (
-                    <button type="button" className="small-button danger" onClick={() => void deleteBase()}>
+                    <button type="button" className="icon-button danger" title="Delete base" onClick={() => void deleteBase()}>
                       <Trash2 size={15} />
-                      Delete base
                     </button>
                   )}
                   <Selector
@@ -1000,37 +1050,53 @@ function App() {
                   {selectedTableId && (
                     <button
                       type="button"
-                      className="small-button"
+                      className="icon-button"
+                      title="Rename table"
                       onClick={() => {
                         const table = tables.find((t) => t.table_id === selectedTableId);
                         if (table) openRenameModal("table", table.table_id, table.name);
                       }}
                     >
-                      Rename table
+                      <Pencil size={15} />
                     </button>
                   )}
-                  <button type="button" className="small-button" onClick={createTable}>
+                  <button type="button" className="icon-button" title="Create table" onClick={createTable}>
                     <Grid3X3 size={15} />
-                    Table
                   </button>
                   {selectedTableId && (
-                    <button type="button" className="small-button danger" onClick={() => void deleteTable()}>
+                    <button type="button" className="icon-button danger" title="Delete table" onClick={() => void deleteTable()}>
                       <Trash2 size={15} />
-                      Delete table
                     </button>
                   )}
-                  <button type="button" className="small-button" onClick={() => addField("short_text")}>
-                    <Plus size={15} />
-                    Text
-                  </button>
-                  <button type="button" className="small-button" onClick={() => addField("currency")}>
-                    <Plus size={15} />
-                    Currency
-                  </button>
+                  <Selector
+                    icon={<Plus size={15} />}
+                    label="Column"
+                    value=""
+                    options={[
+                      { value: "short_text", label: "Text" },
+                      { value: "currency", label: "Currency" }
+                    ]}
+                    onChange={(fieldType) => {
+                      if (fieldType) addField(fieldType as FieldType);
+                    }}
+                  />
                   <button type="button" className="small-button" onClick={addRecord}>
                     <Plus size={15} />
                     Record
                   </button>
+                </div>
+
+                <div className="view-controls-bar">
+                  <div className="search-input-wrap">
+                    <Search size={15} />
+                    <input
+                      className="search-input"
+                      type="text"
+                      placeholder="Search records"
+                      value={searchValue}
+                      onChange={(event) => setSearchValue(event.target.value)}
+                    />
+                  </div>
                   <Selector
                     icon={<RefreshCcw size={15} />}
                     label="Filter"
@@ -1090,7 +1156,7 @@ function App() {
                   ) : (
                     <DataGrid
                       fields={visibleFields}
-                      records={records}
+                      records={searchedRecords}
                       editingCell={editingCell}
                       draftValue={draftValue}
                       onDraftChange={setDraftValue}
@@ -1131,26 +1197,34 @@ function App() {
         </footer>
       </section>
 
-      {renamingEntity && (
-        <div className="modal-overlay" onClick={() => setRenamingEntity(null)}>
+      {modalEntity && (
+        <div className="modal-overlay" onClick={() => setModalEntity(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3 className="modal-title">Rename {renamingEntity.type}</h3>
+            <h3 className="modal-title">
+              {modalEntity.mode === "rename" ? `Rename ${modalEntity.type}` : `New ${modalEntity.type}`}
+            </h3>
             <input
               className="modal-input"
               autoFocus
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
+              placeholder={modalEntity.mode === "create" ? `Enter ${modalEntity.type} name` : undefined}
+              value={modalValue}
+              onChange={(e) => setModalValue(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") confirmRename();
-                if (e.key === "Escape") setRenamingEntity(null);
+                if (e.key === "Enter") confirmModal();
+                if (e.key === "Escape") setModalEntity(null);
               }}
             />
             <div className="modal-actions">
-              <button type="button" className="small-button" onClick={() => setRenamingEntity(null)}>
+              <button type="button" className="small-button" onClick={() => setModalEntity(null)}>
                 Cancel
               </button>
-              <button type="button" className="small-button primary" onClick={confirmRename} disabled={!renameValue.trim() || renameValue === renamingEntity.name}>
-                Save
+              <button
+                type="button"
+                className="small-button primary"
+                onClick={confirmModal}
+                disabled={!modalValue.trim() || (modalEntity.mode === "rename" && modalValue === modalEntity.name)}
+              >
+                {modalEntity.mode === "rename" ? "Save" : "Create"}
               </button>
             </div>
           </div>

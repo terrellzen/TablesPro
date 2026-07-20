@@ -318,6 +318,36 @@ h1 {
   overflow-x: auto;
 }
 
+.view-controls-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  overflow-x: auto;
+}
+
+.search-input-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+
+.search-input-wrap .search-input {
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  outline: none;
+  min-width: 160px;
+}
+
 .icon-button {
   display: grid;
   width: 36px;
