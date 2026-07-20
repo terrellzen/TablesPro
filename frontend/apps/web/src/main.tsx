@@ -905,167 +905,224 @@ function App() {
           />
         ) : (
           <>
-            <div className="object-bar">
-              <Selector
-                icon={<Database size={15} />}
-                label="Base"
-                value={selectedBaseId ?? ""}
-                options={bases.map((base) => ({ value: base.base_id, label: base.name }))}
-                onChange={setSelectedBaseId}
-              />
-              {selectedBaseId && (
-                <button
-                  type="button"
-                  className="small-button"
-                  onClick={() => {
-                    const base = bases.find((b) => b.base_id === selectedBaseId);
-                    if (base) openRenameModal("base", base.base_id, base.name);
-                  }}
-                >
-                  Rename base
+            {bases.length === 0 ? (
+              <div className="empty-state workspace-empty">
+                <Database size={24} />
+                <strong>No bases yet</strong>
+                <span>Create a base to start organizing your data.</span>
+                <button type="button" className="small-button primary" onClick={createBase}>
+                  <FolderPlus size={15} />
+                  Create base
                 </button>
-              )}
-              <button type="button" className="small-button" onClick={createBase}>
-                <FolderPlus size={15} />
-                Base
-              </button>
-              {selectedBaseId && (
-                <button type="button" className="small-button danger" onClick={() => void deleteBase()}>
-                  <Trash2 size={15} />
-                  Delete base
-                </button>
-              )}
-              <Selector
-                icon={<Table2 size={15} />}
-                label="Table"
-                value={selectedTableId ?? ""}
-                options={tables.map((table) => ({ value: table.table_id, label: table.name }))}
-                onChange={setSelectedTableId}
-              />
-              {selectedTableId && (
-                <button
-                  type="button"
-                  className="small-button"
-                  onClick={() => {
-                    const table = tables.find((t) => t.table_id === selectedTableId);
-                    if (table) openRenameModal("table", table.table_id, table.name);
-                  }}
-                >
-                  Rename table
-                </button>
-              )}
-              <button type="button" className="small-button" onClick={createTable}>
-                <Grid3X3 size={15} />
-                Table
-              </button>
-              {selectedTableId && (
-                <button type="button" className="small-button danger" onClick={() => void deleteTable()}>
-                  <Trash2 size={15} />
-                  Delete table
-                </button>
-              )}
-              <button type="button" className="small-button" onClick={() => addField("short_text")}>
-                <Plus size={15} />
-                Text
-              </button>
-              <button type="button" className="small-button" onClick={() => addField("currency")}>
-                <Plus size={15} />
-                Currency
-              </button>
-              <button type="button" className="small-button" onClick={addRecord}>
-                <Plus size={15} />
-                Record
-              </button>
-              <Selector
-                icon={<RefreshCcw size={15} />}
-                label="Filter"
-                value={filterFieldId}
-                options={visibleFields.map((field) => ({ value: field.field_id, label: field.name }))}
-                onChange={setFilterFieldId}
-              />
-              <input
-                className="toolbar-input"
-                placeholder="Contains"
-                value={filterValue}
-                onChange={(event) => setFilterValue(event.target.value)}
-              />
-              <Selector
-                icon={<RefreshCcw size={15} />}
-                label="Sort"
-                value={sortFieldId}
-                options={visibleFields.map((field) => ({ value: field.field_id, label: field.name }))}
-                onChange={setSortFieldId}
-              />
-              <select className="role-select compact-select" value={sortDirection} onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")}>
-                <option value="asc">Asc</option>
-                <option value="desc">Desc</option>
-              </select>
-              <button type="button" className="small-button" onClick={createFieldGroup}>
-                <Layers3 size={15} />
-                Group
-              </button>
-              <button type="button" className="small-button" onClick={createSavedView}>
-                <Save size={15} />
-                View
-              </button>
-            </div>
-
-            <div className="view-tabs" role="tablist" aria-label="Saved views">
-              <button type="button" role="tab" aria-selected="true">
-                All records
-              </button>
-              {views.map((view) => (
-                <button type="button" role="tab" aria-selected="false" key={view.saved_view_id}>
-                  {view.name}
-                </button>
-              ))}
-            </div>
-
-            <section className="content-grid">
-              {workspaces.length === 0 ? (
-                <div className="empty-state workspace-empty">
-                  <Database size={24} />
-                  <strong>No workspaces yet</strong>
-                  <span>You need create permission before you can add a workspace.</span>
-                  <button type="button" className="small-button primary" onClick={createWorkspace}>
-                    <Plus size={15} />
-                    Workspace
+              </div>
+            ) : tables.length === 0 ? (
+              <>
+                <div className="object-bar">
+                  <Selector
+                    icon={<Database size={15} />}
+                    label="Base"
+                    value={selectedBaseId ?? ""}
+                    options={bases.map((base) => ({ value: base.base_id, label: base.name }))}
+                    onChange={setSelectedBaseId}
+                  />
+                  {selectedBaseId && (
+                    <button
+                      type="button"
+                      className="small-button"
+                      onClick={() => {
+                        const base = bases.find((b) => b.base_id === selectedBaseId);
+                        if (base) openRenameModal("base", base.base_id, base.name);
+                      }}
+                    >
+                      Rename base
+                    </button>
+                  )}
+                  <button type="button" className="small-button" onClick={createBase}>
+                    <FolderPlus size={15} />
+                    Base
+                  </button>
+                  {selectedBaseId && (
+                    <button type="button" className="small-button danger" onClick={() => void deleteBase()}>
+                      <Trash2 size={15} />
+                      Delete base
+                    </button>
+                  )}
+                </div>
+                <div className="empty-state">
+                  <Table2 size={24} />
+                  <strong>No tables yet</strong>
+                  <span>Create a table to start adding data.</span>
+                  <button type="button" className="small-button primary" onClick={createTable}>
+                    <Grid3X3 size={15} />
+                    Create table
                   </button>
                 </div>
-              ) : (
-                <DataGrid
-                  fields={visibleFields}
-                  records={records}
-                  editingCell={editingCell}
-                  draftValue={draftValue}
-                  onDraftChange={setDraftValue}
-                  onStartEdit={(record, field) => {
-                    setEditingCell({ recordId: record.record_id, fieldId: field.field_id });
-                    setDraftValue(String(record[field.physical_column_name] ?? ""));
-                  }}
-                  onCancelEdit={() => setEditingCell(null)}
-                  onSaveCell={saveCell}
-                  onDeleteRecord={deleteRecord}
-                  onRenameField={(fieldId, name) => {
-                    if (selectedTableId) openRenameModal("field", fieldId, name, selectedTableId);
-                  }}
-                  onContextMenu={(x, y, items) => setContextMenu({ x, y, items })}
-                />
-              )}
+              </>
+            ) : (
+              <>
+                <div className="object-bar">
+                  <Selector
+                    icon={<Database size={15} />}
+                    label="Base"
+                    value={selectedBaseId ?? ""}
+                    options={bases.map((base) => ({ value: base.base_id, label: base.name }))}
+                    onChange={setSelectedBaseId}
+                  />
+                  {selectedBaseId && (
+                    <button
+                      type="button"
+                      className="small-button"
+                      onClick={() => {
+                        const base = bases.find((b) => b.base_id === selectedBaseId);
+                        if (base) openRenameModal("base", base.base_id, base.name);
+                      }}
+                    >
+                      Rename base
+                    </button>
+                  )}
+                  <button type="button" className="small-button" onClick={createBase}>
+                    <FolderPlus size={15} />
+                    Base
+                  </button>
+                  {selectedBaseId && (
+                    <button type="button" className="small-button danger" onClick={() => void deleteBase()}>
+                      <Trash2 size={15} />
+                      Delete base
+                    </button>
+                  )}
+                  <Selector
+                    icon={<Table2 size={15} />}
+                    label="Table"
+                    value={selectedTableId ?? ""}
+                    options={tables.map((table) => ({ value: table.table_id, label: table.name }))}
+                    onChange={setSelectedTableId}
+                  />
+                  {selectedTableId && (
+                    <button
+                      type="button"
+                      className="small-button"
+                      onClick={() => {
+                        const table = tables.find((t) => t.table_id === selectedTableId);
+                        if (table) openRenameModal("table", table.table_id, table.name);
+                      }}
+                    >
+                      Rename table
+                    </button>
+                  )}
+                  <button type="button" className="small-button" onClick={createTable}>
+                    <Grid3X3 size={15} />
+                    Table
+                  </button>
+                  {selectedTableId && (
+                    <button type="button" className="small-button danger" onClick={() => void deleteTable()}>
+                      <Trash2 size={15} />
+                      Delete table
+                    </button>
+                  )}
+                  <button type="button" className="small-button" onClick={() => addField("short_text")}>
+                    <Plus size={15} />
+                    Text
+                  </button>
+                  <button type="button" className="small-button" onClick={() => addField("currency")}>
+                    <Plus size={15} />
+                    Currency
+                  </button>
+                  <button type="button" className="small-button" onClick={addRecord}>
+                    <Plus size={15} />
+                    Record
+                  </button>
+                  <Selector
+                    icon={<RefreshCcw size={15} />}
+                    label="Filter"
+                    value={filterFieldId}
+                    options={visibleFields.map((field) => ({ value: field.field_id, label: field.name }))}
+                    onChange={setFilterFieldId}
+                  />
+                  <input
+                    className="toolbar-input"
+                    placeholder="Contains"
+                    value={filterValue}
+                    onChange={(event) => setFilterValue(event.target.value)}
+                  />
+                  <Selector
+                    icon={<RefreshCcw size={15} />}
+                    label="Sort"
+                    value={sortFieldId}
+                    options={visibleFields.map((field) => ({ value: field.field_id, label: field.name }))}
+                    onChange={setSortFieldId}
+                  />
+                  <select className="role-select compact-select" value={sortDirection} onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")}>
+                    <option value="asc">Asc</option>
+                    <option value="desc">Desc</option>
+                  </select>
+                  <button type="button" className="small-button" onClick={createFieldGroup}>
+                    <Layers3 size={15} />
+                    Group
+                  </button>
+                  <button type="button" className="small-button" onClick={createSavedView}>
+                    <Save size={15} />
+                    View
+                  </button>
+                </div>
 
-              <RightRail
-                currentUser={currentUser}
-                profile={profile}
-                members={members}
-                directUserId={directUserId}
-                directRole={directRole}
-                onDirectUserIdChange={setDirectUserId}
-                onDirectRoleChange={setDirectRole}
-                onAddDirectMember={addDirectMember}
-                onChangeRole={changeMemberRole}
-                onRemoveMember={removeMember}
-              />
-            </section>
+                <div className="view-tabs" role="tablist" aria-label="Saved views">
+                  <button type="button" role="tab" aria-selected="true">
+                    All records
+                  </button>
+                  {views.map((view) => (
+                    <button type="button" role="tab" aria-selected="false" key={view.saved_view_id}>
+                      {view.name}
+                    </button>
+                  ))}
+                </div>
+
+                <section className="content-grid">
+                  {fields.length === 0 ? (
+                    <div className="empty-state">
+                      <Table2 size={24} />
+                      <strong>No fields yet</strong>
+                      <span>Add a field to start building your table.</span>
+                      <button type="button" className="small-button primary" onClick={() => addField("short_text")}>
+                        <Plus size={15} />
+                        Add text field
+                      </button>
+                    </div>
+                  ) : (
+                    <DataGrid
+                      fields={visibleFields}
+                      records={records}
+                      editingCell={editingCell}
+                      draftValue={draftValue}
+                      onDraftChange={setDraftValue}
+                      onStartEdit={(record, field) => {
+                        setEditingCell({ recordId: record.record_id, fieldId: field.field_id });
+                        setDraftValue(String(record[field.physical_column_name] ?? ""));
+                      }}
+                      onCancelEdit={() => setEditingCell(null)}
+                      onSaveCell={saveCell}
+                      onDeleteRecord={deleteRecord}
+                      onRenameField={(fieldId, name) => {
+                        if (selectedTableId) openRenameModal("field", fieldId, name, selectedTableId);
+                      }}
+                      onContextMenu={(x, y, items) => setContextMenu({ x, y, items })}
+                    />
+                  )}
+
+                  <RightRail
+                    currentUser={currentUser}
+                    profile={profile}
+                    members={members}
+                    directUserId={directUserId}
+                    directRole={directRole}
+                    onDirectUserIdChange={setDirectUserId}
+                    onDirectRoleChange={setDirectRole}
+                    onAddDirectMember={addDirectMember}
+                    onChangeRole={changeMemberRole}
+                    onRemoveMember={removeMember}
+                  />
+                </section>
+              </>
+            )}
           </>
         )}
 
