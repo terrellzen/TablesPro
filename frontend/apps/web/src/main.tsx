@@ -12,12 +12,15 @@ import {
   Layers3,
   LogIn,
   LogOut,
+  Monitor,
+  Moon,
   Pencil,
   Plus,
   RefreshCcw,
   Save,
   Search,
   ShieldCheck,
+  Sun,
   Table2,
   Trash2,
   UserPlus,
@@ -28,7 +31,10 @@ import "./styles/theme.css";
 import "./styles/app.css";
 
 const apiServerStorageKey = "tablespro.apiServerUrl";
+const themeStorageKey = "tablespro.theme";
 const defaultApiBaseUrl = import.meta.env.VITE_API_URL ?? `${window.location.protocol}//${window.location.hostname}:4000`;
+
+type ThemePreference = "light" | "dark" | "system";
 
 type Workspace = {
   workspace_id: string;
@@ -177,6 +183,7 @@ type AppConfig = {
 };
 
 function App() {
+  const [themePreference, setThemePreference] = useState<ThemePreference>(() => readThemePreference());
   const [authChecked, setAuthChecked] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [apiServerUrl, setApiServerUrl] = useState(() => getConfiguredApiBaseUrl());
@@ -235,6 +242,15 @@ function App() {
   const selectedBase = bases.find((base) => base.base_id === selectedBaseId) ?? null;
   const selectedTable = tables.find((table) => table.table_id === selectedTableId) ?? null;
   const visibleFields = fields.filter((field) => !field.hidden);
+
+  useEffect(() => {
+    localStorage.setItem(themeStorageKey, themePreference);
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => applyThemePreference(themePreference, media.matches);
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, [themePreference]);
 
   const searchedRecords = useMemo(() => {
     if (!searchValue.trim()) return records;
@@ -1165,14 +1181,17 @@ function App() {
     return (
       <main className="auth-layout">
         <div className="auth-card compact">
-          <div className="brand-row">
-            <div className="brand-mark" aria-hidden="true">
-              TP
+          <div className="auth-card-heading">
+            <div className="brand-row">
+              <div className="brand-mark" aria-hidden="true">
+                TP
+              </div>
+              <div>
+                <strong>TablesPro</strong>
+                <span>Checking session</span>
+              </div>
             </div>
-            <div>
-              <strong>TablesPro</strong>
-              <span>Checking session</span>
-            </div>
+            <ThemeControl value={themePreference} onChange={setThemePreference} />
           </div>
         </div>
       </main>
@@ -1186,6 +1205,8 @@ function App() {
         signUpEnabled={signUpEnabled}
         onApiServerChange={handleApiServerChange}
         onAuthenticated={handleAuthenticated}
+        themePreference={themePreference}
+        onThemeChange={setThemePreference}
       />
     );
   }
@@ -1270,6 +1291,7 @@ function App() {
             <h1>{selectedTable?.name ?? "Choose a table"}</h1>
           </div>
           <div className="topbar-actions">
+            <ThemeControl value={themePreference} onChange={setThemePreference} />
             <button type="button" className="icon-button" onClick={refresh} aria-label="Refresh data">
               <RefreshCcw size={18} />
             </button>
@@ -1637,11 +1659,43 @@ function App() {
   );
 }
 
+function ThemeControl(props: {
+  value: ThemePreference;
+  onChange: (theme: ThemePreference) => void;
+  compact?: boolean;
+}) {
+  const options: { value: ThemePreference; label: string; icon: React.ReactNode }[] = [
+    { value: "light", label: "Light", icon: <Sun size={14} /> },
+    { value: "system", label: "System", icon: <Monitor size={14} /> },
+    { value: "dark", label: "Dark", icon: <Moon size={14} /> }
+  ];
+  return (
+    <div className={`theme-control${props.compact ? " compact" : ""}`} role="group" aria-label="Appearance">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className={props.value === option.value ? "active" : ""}
+          onClick={() => props.onChange(option.value)}
+          aria-label={`${option.label} appearance`}
+          aria-pressed={props.value === option.value}
+          title={option.label}
+        >
+          {option.icon}
+          {!props.compact && <span>{option.label}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function AuthScreen(props: {
   apiServerUrl: string;
   signUpEnabled: boolean;
   onApiServerChange: (url: string) => Promise<void>;
   onAuthenticated: () => Promise<void>;
+  themePreference: ThemePreference;
+  onThemeChange: (theme: ThemePreference) => void;
 }) {
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
   const [serverDraft, setServerDraft] = useState(props.apiServerUrl);
@@ -1699,14 +1753,17 @@ function AuthScreen(props: {
   return (
     <main className="auth-layout">
       <form className="auth-card" onSubmit={(event) => void submit(event)}>
-        <div className="brand-row">
-          <div className="brand-mark" aria-hidden="true">
-            TP
+        <div className="auth-card-heading">
+          <div className="brand-row">
+            <div className="brand-mark" aria-hidden="true">
+              TP
+            </div>
+            <div>
+              <strong>TablesPro</strong>
+              <span>{mode === "sign-in" ? "Welcome back" : "Create your workspace"}</span>
+            </div>
           </div>
-          <div>
-            <strong>TablesPro</strong>
-            <span>{mode === "sign-in" ? "Sign in" : "Create account"}</span>
-          </div>
+          <ThemeControl value={props.themePreference} onChange={props.onThemeChange} compact />
         </div>
 
         <div className="auth-toggle" role="tablist" aria-label="Authentication mode">
@@ -2730,6 +2787,19 @@ function coerceFieldValue(value: string, fieldType: FieldType): unknown {
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong";
 }
+
+function readThemePreference(): ThemePreference {
+  const stored = localStorage.getItem(themeStorageKey);
+  return stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
+}
+
+function applyThemePreference(preference: ThemePreference, systemDark: boolean): void {
+  const resolved = preference === "system" ? (systemDark ? "dark" : "light") : preference;
+  document.documentElement.dataset.theme = resolved;
+  document.documentElement.style.colorScheme = resolved;
+}
+
+applyThemePreference(readThemePreference(), window.matchMedia("(prefers-color-scheme: dark)").matches);
 
 createRoot(document.getElementById("root") as HTMLElement).render(
   <StrictMode>
