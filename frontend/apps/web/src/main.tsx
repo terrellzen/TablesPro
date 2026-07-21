@@ -2,6 +2,7 @@ import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "r
 import { createRoot } from "react-dom/client";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  Copy,
   Database,
   Download,
   FolderPlus,
@@ -185,6 +186,7 @@ function App() {
   const [bases, setBases] = useState<Base[]>([]);
   const [tables, setTables] = useState<AppTable[]>([]);
   const [fields, setFields] = useState<Field[]>([]);
+  const [schemaTableId, setSchemaTableId] = useState<string | null>(null);
   const [records, setRecords] = useState<RecordRow[]>([]);
   const [views, setViews] = useState<SavedView[]>([]);
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
@@ -207,6 +209,17 @@ function App() {
   const [draftValue, setDraftValue] = useState("");
   const [status, setStatus] = useState<Status>({ tone: "idle", text: "Ready" });
   const [loading, setLoading] = useState(false);
+  const pageSize = 100;
+  const [hasMore, setHasMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingRows, setLoadingRows] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const recordsGenerationRef = useRef(0);
+  const recordsRequestRef = useRef<AbortController | null>(null);
+  const loadMoreRequestRef = useRef<AbortController | null>(null);
+  const loadingMoreRef = useRef(false);
+  const deletingFieldIdsRef = useRef(new Set<string>());
   const [modalEntity, setModalEntity] = useState<{
     mode: "rename" | "create";
     type: "workspace" | "base" | "table" | "field" | "view" | "fieldGroup";
@@ -275,8 +288,11 @@ function App() {
     );
   }, []);
 
-  const loadTableData = useCallback(async (tableId: string) => {
-    const recordParams = new URLSearchParams({ limit: "100" });
+  const fetchRecordPage = useCallback(async (tableId: string, cursor?: string, signal?: AbortSignal) => {
+    const recordParams = new URLSearchParams({ limit: String(pageSize) });
+    if (cursor) {
+      recordParams.set("cursor", cursor);
+    }
     if (filterFieldId && filterValue) {
       recordParams.set(
         "filter",
@@ -286,15 +302,74 @@ function App() {
     if (sortFieldId) {
       recordParams.set("sort", JSON.stringify([{ fieldId: sortFieldId, direction: sortDirection }]));
     }
-    const [fieldResponse, recordResponse, viewResponse] = await Promise.all([
-      api<PageEnvelope<Field>>(`/api/tables/${tableId}/fields`),
-      api<PageEnvelope<RecordRow>>(`/api/tables/${tableId}/records?${recordParams.toString()}`),
-      api<PageEnvelope<SavedView>>(`/api/tables/${tableId}/views`)
-    ]);
-    setFields(fieldResponse.data);
-    setRecords(recordResponse.data);
-    setViews(viewResponse.data);
-  }, [filterFieldId, filterValue, sortDirection, sortFieldId]);
+    return api<PageEnvelope<RecordRow>>(
+      `/api/tables/${tableId}/records?${recordParams.toString()}`,
+      signal ? { signal } : {}
+    );
+  }, [filterFieldId, filterValue, sortDirection, sortFieldId, pageSize]);
+
+  const reloadRecords = useCallback(async (tableId: string) => {
+    const generation = recordsGenerationRef.current + 1;
+    recordsGenerationRef.current = generation;
+    recordsRequestRef.current?.abort();
+    loadMoreRequestRef.current?.abort();
+    loadingMoreRef.current = false;
+    const controller = new AbortController();
+    recordsRequestRef.current = controller;
+    setRecords([]);
+    setHasMore(false);
+    setNextCursor(null);
+    setLoadMoreError(null);
+    setLoadingMore(false);
+    setLoadingRows(true);
+    try {
+      const response = await fetchRecordPage(tableId, undefined, controller.signal);
+      if (recordsGenerationRef.current !== generation) return;
+      setRecords(response.data);
+      setHasMore(response.page?.hasMore ?? false);
+      setNextCursor(response.page?.nextCursor ?? null);
+    } catch (error) {
+      if (!controller.signal.aborted && recordsGenerationRef.current === generation) {
+        setStatus({ tone: "danger", text: errorMessage(error) });
+      }
+    } finally {
+      if (recordsGenerationRef.current === generation) {
+        setLoadingRows(false);
+      }
+    }
+  }, [fetchRecordPage]);
+
+  const loadMore = useCallback(async () => {
+    if (!selectedTableId || !hasMore || loadingMoreRef.current || !nextCursor) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    setLoadMoreError(null);
+    const generation = recordsGenerationRef.current;
+    const controller = new AbortController();
+    loadMoreRequestRef.current?.abort();
+    loadMoreRequestRef.current = controller;
+    try {
+      const response = await fetchRecordPage(selectedTableId, nextCursor, controller.signal);
+      if (recordsGenerationRef.current !== generation) return;
+      setRecords((current) => {
+        const existingIds = new Set(current.map((record) => record.record_id));
+        return [...current, ...response.data.filter((record) => !existingIds.has(record.record_id))];
+      });
+      setHasMore(response.page?.hasMore ?? false);
+      setNextCursor(response.page?.nextCursor ?? null);
+    } catch (err) {
+      if (!controller.signal.aborted && recordsGenerationRef.current === generation) {
+        const message = errorMessage(err);
+        setLoadMoreError(message);
+        setStatus({ tone: "danger", text: message });
+      }
+    } finally {
+      if (recordsGenerationRef.current === generation) {
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      }
+    }
+  }, [fetchRecordPage, hasMore, nextCursor, selectedTableId]);
 
   const loadAuditEvents = useCallback(async (workspaceId: string) => {
     const response = await api<PageEnvelope<AuditEvent>>(`/api/workspaces/${workspaceId}/audit-events?limit=100`);
@@ -338,7 +413,14 @@ function App() {
         await loadTables(selectedBaseId);
       }
       if (selectedTableId) {
-        await loadTableData(selectedTableId);
+        await Promise.all([
+          api<PageEnvelope<Field>>(`/api/tables/${selectedTableId}/fields`),
+          api<PageEnvelope<SavedView>>(`/api/tables/${selectedTableId}/views`)
+        ]).then(([fieldResponse, viewResponse]) => {
+          setFields(fieldResponse.data);
+          setViews(viewResponse.data);
+        });
+        await reloadRecords(selectedTableId);
       }
       setStatus({ tone: "success", text: "Synced" });
     } catch (error) {
@@ -346,7 +428,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [loadAdminData, loadAdminWorkspaces, loadAuditEvents, loadBases, loadTableData, loadTables, loadWorkspaces, profile, selectedBaseId, selectedTableId, selectedWorkspaceId]);
+  }, [loadAdminData, loadAdminWorkspaces, loadAuditEvents, loadBases, loadTables, loadWorkspaces, profile, reloadRecords, selectedBaseId, selectedTableId, selectedWorkspaceId]);
 
   useEffect(() => {
     void Promise.all([loadAppConfig(), loadCurrentUser()]);
@@ -389,43 +471,87 @@ function App() {
 
   useEffect(() => {
     if (!selectedTableId) {
+      setSchemaTableId(null);
       setFields([]);
       setRecords([]);
       setViews([]);
       setActiveViewId(null);
       setSearchValue("");
+      setHasMore(false);
+      setNextCursor(null);
+      recordsGenerationRef.current += 1;
+      recordsRequestRef.current?.abort();
+      loadMoreRequestRef.current?.abort();
       return;
     }
-    loadTableData(selectedTableId).catch((error) => setStatus({ tone: "danger", text: errorMessage(error) }));
-  }, [loadTableData, selectedTableId]);
+    const controller = new AbortController();
+    setSchemaTableId(null);
+    setFields([]);
+    setViews([]);
+    setActiveViewId(null);
+    setSearchValue("");
+    setFilterFieldId("");
+    setFilterValue("");
+    setSortFieldId("");
+    setSortDirection("asc");
+    setHasMore(false);
+    setNextCursor(null);
+    Promise.all([
+      api<PageEnvelope<Field>>(`/api/tables/${selectedTableId}/fields`, { signal: controller.signal }),
+      api<PageEnvelope<SavedView>>(`/api/tables/${selectedTableId}/views`, { signal: controller.signal })
+    ]).then(([fieldResponse, viewResponse]) => {
+      setFields(fieldResponse.data);
+      setViews(viewResponse.data);
+      setSchemaTableId(selectedTableId);
+    }).catch((error) => {
+      if (!controller.signal.aborted) {
+        setStatus({ tone: "danger", text: errorMessage(error) });
+      }
+    });
+    return () => controller.abort();
+  }, [selectedTableId]);
 
   useEffect(() => {
     if (!activeViewId) {
-      setSearchValue("");
-      setFields((prev) => prev.map((f) => ({ ...f, hidden: false })));
-      setFilterFieldId("");
-      setFilterValue("");
-      setSortFieldId("");
-      setSortDirection("asc");
       return;
     }
     const view = views.find((v) => v.saved_view_id === activeViewId);
     if (!view) return;
-    if (view.search) setSearchValue(view.search);
-    if (view.visible_field_ids?.length) {
-      setFields((prev) => prev.map((f) => ({ ...f, hidden: !view.visible_field_ids.includes(f.field_id) })));
-    }
-    if (view.filters?.length) {
-      const filter = view.filters[0]!;
-      setFilterFieldId(filter.fieldId);
-      setFilterValue(filter.value);
-    }
-    if (view.sorts?.length) {
-      const sort = view.sorts[0]!;
-      setSortFieldId(sort.field_id);
-      setSortDirection(sort.direction as "asc" | "desc");
-    }
+    const visibleFieldIds = new Set(view.visible_field_ids ?? []);
+    const order = new Map((view.field_order ?? []).map((fieldId, index) => [fieldId, index]));
+    setFields((current) => [...current]
+      .sort((left, right) => (order.get(left.field_id) ?? Number.MAX_SAFE_INTEGER) - (order.get(right.field_id) ?? Number.MAX_SAFE_INTEGER))
+      .map((field) => ({
+        ...field,
+        hidden: view.field_order?.length > 0 ? !visibleFieldIds.has(field.field_id) : false
+      })));
+    setSearchValue(view.search ?? "");
+    const filter = view.filters?.[0];
+    setFilterFieldId(filter?.fieldId ?? "");
+    setFilterValue(filter?.value ?? "");
+    const sort = view.sorts?.[0];
+    setSortFieldId(sort?.field_id ?? "");
+    setSortDirection(sort?.direction === "desc" ? "desc" : "asc");
   }, [activeViewId, views]);
+
+  function showAllRecords() {
+    setActiveViewId(null);
+    setSearchValue("");
+    setFilterFieldId("");
+    setFilterValue("");
+    setSortFieldId("");
+    setSortDirection("asc");
+    setFields((current) => current.map((field) => ({ ...field, hidden: false })));
+  }
+
+  useEffect(() => {
+    if (!selectedTableId || schemaTableId !== selectedTableId) return;
+    void reloadRecords(selectedTableId);
+    return () => {
+      recordsRequestRef.current?.abort();
+      loadMoreRequestRef.current?.abort();
+    };
+  }, [schemaTableId, selectedTableId, reloadRecords]);
 
   async function createWorkspace() {
     if (!profile?.can_create_workspaces) {
@@ -465,9 +591,9 @@ function App() {
       return;
     }
     await mutate(`/api/tables/${selectedTableId}/records`, {
-      values: Object.fromEntries(visibleFields.map((field) => [field.field_id, ""]))
+      values: Object.fromEntries(visibleFields.map((field) => [field.field_id, null]))
     });
-    await loadTableData(selectedTableId);
+    await reloadRecords(selectedTableId);
     await loadAuditEvents(selectedWorkspaceId);
   }
 
@@ -493,11 +619,54 @@ function App() {
     await loadAuditEvents(selectedWorkspaceId);
   }
 
+  async function duplicateWorkspace(workspaceId: string) {
+    try {
+      const response = await mutate<{ data: { workspace_id: string; name: string } }>(`/api/workspaces/${workspaceId}/duplicate`, {});
+      setSelectedWorkspaceId(response.data.workspace_id);
+      await loadWorkspaces();
+      setStatus({ tone: "success", text: `Workspace duplicated as "${response.data.name}"` });
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+    }
+  }
+
+  async function duplicateBase(baseId: string) {
+    if (!selectedWorkspaceId) return;
+    try {
+      const response = await mutate<{ data: { base_id: string; name: string } }>(`/api/bases/${baseId}/duplicate`, {});
+      setSelectedBaseId(response.data.base_id);
+      await loadBases(selectedWorkspaceId);
+      await loadAuditEvents(selectedWorkspaceId);
+      setStatus({ tone: "success", text: `Base duplicated as "${response.data.name}"` });
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+    }
+  }
+
+  async function duplicateTable(tableId: string) {
+    if (!selectedBaseId || !selectedWorkspaceId) return;
+    try {
+      const response = await mutate<{ data: { tableId: string; name: string } }>(`/api/tables/${tableId}/duplicate`, {});
+      setSelectedTableId(response.data.tableId);
+      await loadTables(selectedBaseId);
+      await loadAuditEvents(selectedWorkspaceId);
+      setStatus({ tone: "success", text: `Table duplicated as "${response.data.name}"` });
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+    }
+  }
+
   async function createFieldWithName(name: string, fieldType: FieldType, tableId: string) {
     if (!selectedWorkspaceId) return;
-    await mutate(`/api/tables/${tableId}/fields`, { name, fieldType });
-    await loadTableData(tableId);
-    await loadAuditEvents(selectedWorkspaceId);
+    try {
+      await mutate(`/api/tables/${tableId}/fields`, { name: name.trim(), fieldType });
+      const fieldResponse = await api<PageEnvelope<Field>>(`/api/tables/${tableId}/fields`);
+      setFields(fieldResponse.data);
+      await Promise.all([reloadRecords(tableId), loadAuditEvents(selectedWorkspaceId)]);
+      setStatus({ tone: "success", text: `Column “${name.trim()}” created` });
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+    }
   }
 
   async function createViewWithName(name: string) {
@@ -508,17 +677,24 @@ function App() {
     const sorts = sortFieldId
       ? [{ fieldId: sortFieldId, direction: sortDirection }]
       : [];
-    await mutate(`/api/tables/${selectedTableId}/views`, {
-      name,
-      isShared: true,
-      search: searchValue || null,
-      visibleFieldIds: visibleFields.map((field) => field.field_id),
-      fieldOrder: fields.map((field) => field.field_id),
-      filters,
-      sorts
-    });
-    await loadTableData(selectedTableId);
-    await loadAuditEvents(selectedWorkspaceId);
+    try {
+      const response = await mutate<{ data: { saved_view_id: string } }>(`/api/tables/${selectedTableId}/views`, {
+        name: name.trim(),
+        isShared: true,
+        search: searchValue || null,
+        visibleFieldIds: visibleFields.map((field) => field.field_id),
+        fieldOrder: fields.map((field) => field.field_id),
+        filters,
+        sorts
+      });
+      const viewResponse = await api<PageEnvelope<SavedView>>(`/api/tables/${selectedTableId}/views`);
+      setViews(viewResponse.data);
+      setActiveViewId(response.data.saved_view_id);
+      await loadAuditEvents(selectedWorkspaceId);
+      setStatus({ tone: "success", text: `View “${name.trim()}” saved` });
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+    }
   }
 
   async function createFieldGroupWithName(name: string) {
@@ -534,6 +710,20 @@ function App() {
     }
     setModalEntity({ mode: "create", type: "view" });
     setModalValue("");
+  }
+
+  async function deleteView(viewId: string) {
+    if (!selectedTableId || !selectedWorkspaceId) return;
+    if (!window.confirm("Delete this view?")) return;
+    try {
+      await request(`/api/tables/${selectedTableId}/views/${viewId}`, { method: "DELETE" });
+      if (activeViewId === viewId) showAllRecords();
+      setViews((current) => current.filter((view) => view.saved_view_id !== viewId));
+      await reloadRecords(selectedTableId);
+      setStatus({ tone: "success", text: "View deleted" });
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+    }
   }
 
   async function createFieldGroup() {
@@ -670,7 +860,7 @@ function App() {
       return;
     }
     setEditingCell(null);
-    const previous = records;
+    const previousRecord = record;
     setRecords((current) =>
       current.map((row) =>
         row.record_id === record.record_id ? { ...row, [field.physical_column_name]: draftValue } : row
@@ -685,9 +875,8 @@ function App() {
       await loadAuditEvents(selectedWorkspaceId);
       setStatus({ tone: "success", text: "Cell saved" });
     } catch (error) {
-      setRecords(previous);
+      setRecords((current) => current.map((row) => (row.record_id === record.record_id ? previousRecord : row)));
       setStatus({ tone: "danger", text: errorMessage(error) });
-      await loadTableData(selectedTableId);
     }
   }
 
@@ -822,6 +1011,17 @@ function App() {
     }
   }
 
+  function hideField(fieldId: string) {
+    if (visibleFields.length <= 1) {
+      setStatus({ tone: "danger", text: "A view must keep at least one column visible" });
+      return;
+    }
+    setFields((current) => current.map((field) => (
+      field.field_id === fieldId ? { ...field, hidden: true } : field
+    )));
+    setStatus({ tone: "idle", text: "Column hidden · save the view to keep this layout" });
+  }
+
   async function moveField(fieldId: string, direction: "left" | "right" | "start" | "end") {
     if (!selectedTableId || !selectedWorkspaceId) return;
     setFields((prev) => {
@@ -849,14 +1049,19 @@ function App() {
 
   async function deleteField(fieldId: string) {
     if (!selectedTableId || !selectedWorkspaceId) return;
+    if (deletingFieldIdsRef.current.has(fieldId)) return;
     if (!window.confirm("Delete this column and all its data?")) return;
+    deletingFieldIdsRef.current.add(fieldId);
     try {
       await request(`/api/tables/${selectedTableId}/fields/${fieldId}`, { method: "DELETE" });
-      await loadTableData(selectedTableId);
+      setFields((current) => current.filter((field) => field.field_id !== fieldId));
+      await reloadRecords(selectedTableId);
       await loadAuditEvents(selectedWorkspaceId);
       setStatus({ tone: "success", text: "Column deleted" });
     } catch (error) {
       setStatus({ tone: "danger", text: errorMessage(error) });
+    } finally {
+      deletingFieldIdsRef.current.delete(fieldId);
     }
   }
 
@@ -1033,7 +1238,8 @@ function App() {
                     x: e.clientX,
                     y: e.clientY,
                     items: [
-                      { label: "Rename", onClick: () => openRenameModal("workspace", workspace.workspace_id, workspace.name) }
+                      { label: "Rename", onClick: () => openRenameModal("workspace", workspace.workspace_id, workspace.name) },
+                      { label: "Duplicate", onClick: () => void duplicateWorkspace(workspace.workspace_id) }
                     ]
                   });
                 }}
@@ -1126,6 +1332,12 @@ function App() {
                     Base
                   </button>
                   {selectedBaseId && (
+                    <button type="button" className="small-button" onClick={() => void duplicateBase(selectedBaseId)}>
+                      <Copy size={15} />
+                      Duplicate base
+                    </button>
+                  )}
+                  {selectedBaseId && (
                     <button type="button" className="small-button danger" onClick={() => void deleteBase()}>
                       <Trash2 size={15} />
                       Delete base
@@ -1169,6 +1381,11 @@ function App() {
                     <FolderPlus size={15} />
                   </button>
                   {selectedBaseId && (
+                    <button type="button" className="icon-button" title="Duplicate base" onClick={() => void duplicateBase(selectedBaseId)}>
+                      <Copy size={15} />
+                    </button>
+                  )}
+                  {selectedBaseId && (
                     <button type="button" className="icon-button danger" title="Delete base" onClick={() => void deleteBase()}>
                       <Trash2 size={15} />
                     </button>
@@ -1196,6 +1413,11 @@ function App() {
                   <button type="button" className="icon-button" title="Create table" onClick={createTable}>
                     <Grid3X3 size={15} />
                   </button>
+                  {selectedTableId && (
+                    <button type="button" className="icon-button" title="Duplicate table" onClick={() => void duplicateTable(selectedTableId)}>
+                      <Copy size={15} />
+                    </button>
+                  )}
                   {selectedTableId && (
                     <button type="button" className="icon-button danger" title="Delete table" onClick={() => void deleteTable()}>
                       <Trash2 size={15} />
@@ -1227,14 +1449,14 @@ function App() {
                       type="text"
                       placeholder="Search records"
                       value={searchValue}
-                      onChange={(event) => setSearchValue(event.target.value)}
+                      onChange={(event) => { setSearchValue(event.target.value); setNextCursor(null); }}
                     />
                   </div>
                   <Selector
                     icon={<RefreshCcw size={15} />}
                     label="Filter"
                     value={filterFieldId}
-                    options={visibleFields.map((field) => ({ value: field.field_id, label: field.name }))}
+                    options={fields.map((field) => ({ value: field.field_id, label: field.name }))}
                     onChange={setFilterFieldId}
                   />
                   <input
@@ -1247,7 +1469,7 @@ function App() {
                     icon={<RefreshCcw size={15} />}
                     label="Sort"
                     value={sortFieldId}
-                    options={visibleFields.map((field) => ({ value: field.field_id, label: field.name }))}
+                    options={fields.map((field) => ({ value: field.field_id, label: field.name }))}
                     onChange={setSortFieldId}
                   />
                   <select className="role-select compact-select" value={sortDirection} onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")}>
@@ -1265,12 +1487,13 @@ function App() {
                 </div>
 
                 <div className="view-tabs" role="tablist" aria-label="Saved views">
-                  <button type="button" role="tab" aria-selected={activeViewId === null} onClick={() => setActiveViewId(null)}>
+                  <button type="button" role="tab" aria-selected={activeViewId === null} onClick={showAllRecords}>
                     All records
                   </button>
                   {views.map((view) => (
-                    <button type="button" role="tab" aria-selected={activeViewId === view.saved_view_id} key={view.saved_view_id} onClick={() => setActiveViewId(view.saved_view_id)}>
+                    <button type="button" role="tab" className="view-tab" aria-selected={activeViewId === view.saved_view_id} key={view.saved_view_id} onClick={() => setActiveViewId(view.saved_view_id)}>
                       {view.name}
+                      <span className="view-tab-close" onClick={(e) => { e.stopPropagation(); void deleteView(view.saved_view_id); }}>&times;</span>
                     </button>
                   ))}
                 </div>
@@ -1287,27 +1510,43 @@ function App() {
                       </button>
                     </div>
                   ) : (
-                    <DataGrid
-                      fields={visibleFields}
-                      allFields={fields}
-                      records={searchedRecords}
-                      editingCell={editingCell}
-                      draftValue={draftValue}
-                      onDraftChange={setDraftValue}
-                      onStartEdit={(record, field) => {
-                        setEditingCell({ recordId: record.record_id, fieldId: field.field_id });
-                        setDraftValue(String(record[field.physical_column_name] ?? ""));
-                      }}
-                      onCancelEdit={() => setEditingCell(null)}
-                      onSaveCell={saveCell}
-                      onDeleteRecord={deleteRecord}
-                      onRenameField={(fieldId, name) => {
-                        if (selectedTableId) openRenameModal("field", fieldId, name, selectedTableId);
-                      }}
-                      onMoveField={moveField}
-                      onDeleteField={deleteField}
-                      onContextMenu={(x, y, items) => setContextMenu({ x, y, items })}
-                    />
+                    <div className="grid-panel">
+                      {records.length > 0 && fields.length > 0 && (
+                        <div className="pagination-bar">
+                          <span className="pagination-info">
+                            {records.length.toLocaleString()} row{records.length !== 1 ? "s" : ""} loaded
+                            {hasMore ? " · loading ahead as you scroll" : " · all records loaded"}
+                          </span>
+                        </div>
+                      )}
+                      <DataGrid
+                        fields={visibleFields}
+                        allFields={fields}
+                        records={searchedRecords}
+                        editingCell={editingCell}
+                        draftValue={draftValue}
+                        onDraftChange={setDraftValue}
+                        onStartEdit={(record, field) => {
+                          setEditingCell({ recordId: record.record_id, fieldId: field.field_id });
+                          setDraftValue(String(record[field.physical_column_name] ?? ""));
+                        }}
+                        onCancelEdit={() => setEditingCell(null)}
+                        onSaveCell={saveCell}
+                        onDeleteRecord={deleteRecord}
+                        onRenameField={(fieldId, name) => {
+                          if (selectedTableId) openRenameModal("field", fieldId, name, selectedTableId);
+                        }}
+                        onMoveField={moveField}
+                        onHideField={hideField}
+                        onDeleteField={deleteField}
+                        onContextMenu={(x, y, items) => setContextMenu({ x, y, items })}
+                        onLoadMore={loadMore}
+                        hasMore={hasMore}
+                        initialLoading={loadingRows}
+                        loadingMore={loadingMore}
+                        loadMoreError={loadMoreError}
+                      />
+                    </div>
                   )}
 
                   <RightRail
@@ -2183,8 +2422,14 @@ function DataGrid(props: {
   onDeleteRecord: (record: RecordRow) => void;
   onRenameField: (fieldId: string, name: string) => void;
   onMoveField: (fieldId: string, direction: "left" | "right" | "start" | "end") => void;
+  onHideField: (fieldId: string) => void;
   onDeleteField: (fieldId: string) => void;
   onContextMenu: (x: number, y: number, items: { label: string; onClick: () => void; className?: string; divider?: boolean }[]) => void;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  initialLoading?: boolean;
+  loadingMore?: boolean;
+  loadMoreError?: string | null;
 }) {
   const parentRef = useRef<HTMLDivElement | null>(null);
   const deleteColumnWidth = 40;
@@ -2192,7 +2437,8 @@ function DataGrid(props: {
     count: props.records.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 38,
-    overscan: 8
+    overscan: 12,
+    getItemKey: (index) => props.records[index]?.record_id ?? index
   });
   const columnVirtualizer = useVirtualizer({
     horizontal: true,
@@ -2202,10 +2448,39 @@ function DataGrid(props: {
     overscan: 4
   });
 
+  const handleScroll = useCallback(() => {
+    const el = parentRef.current;
+    if (!el || !props.onLoadMore) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < el.clientHeight * 2) {
+      props.onLoadMore();
+    }
+  }, [props.onLoadMore]);
+
   const virtualRows = rowVirtualizer.getVirtualItems();
   const virtualColumns = columnVirtualizer.getVirtualItems();
   const totalWidth = columnVirtualizer.getTotalSize() + deleteColumnWidth;
   const totalHeight = rowVirtualizer.getTotalSize();
+  const footerHeight = props.initialLoading ? 0 : 42;
+  const bodyHeight = props.initialLoading && props.records.length === 0 ? 12 * 38 : totalHeight + footerHeight;
+
+  useEffect(() => {
+    if (props.initialLoading && parentRef.current) {
+      parentRef.current.scrollTop = 0;
+    }
+  }, [props.initialLoading]);
+
+  useEffect(() => {
+    const lastRow = virtualRows[virtualRows.length - 1];
+    if (
+      lastRow &&
+      props.hasMore &&
+      !props.loadingMore &&
+      !props.loadMoreError &&
+      lastRow.index >= props.records.length - 20
+    ) {
+      props.onLoadMore?.();
+    }
+  }, [props.hasMore, props.loadMoreError, props.loadingMore, props.onLoadMore, props.records.length, virtualRows]);
 
   if (props.fields.length === 0) {
     return (
@@ -2218,7 +2493,7 @@ function DataGrid(props: {
 
   return (
     <div className="grid-shell" aria-label="Records">
-      <div className="grid-scroll" ref={parentRef}>
+      <div className="grid-scroll" ref={parentRef} onScroll={handleScroll}>
         <div className="grid-header" style={{ width: totalWidth, height: 38 }}>
           {virtualColumns.map((virtualColumn) => {
             const field = props.fields[virtualColumn.index];
@@ -2244,6 +2519,7 @@ function DataGrid(props: {
                     items.push({ label: "Move right", onClick: () => props.onMoveField(field.field_id, "right") });
                     items.push({ label: "Move to end", onClick: () => props.onMoveField(field.field_id, "end") });
                   }
+                  items.push({ label: "Hide column", onClick: () => props.onHideField(field.field_id) });
                   items.push({ label: "", onClick: () => {}, divider: true });
                   items.push({ label: "Delete column", onClick: () => props.onDeleteField(field.field_id), className: "danger" });
                   props.onContextMenu(e.clientX, e.clientY, items);
@@ -2259,7 +2535,18 @@ function DataGrid(props: {
             style={{ left: totalWidth - deleteColumnWidth, width: deleteColumnWidth }}
           />
         </div>
-        <div className="grid-body" style={{ width: totalWidth, height: totalHeight }}>
+        <div className="grid-body" style={{ width: totalWidth, height: bodyHeight }}>
+          {props.initialLoading && props.records.length === 0 && Array.from({ length: 12 }, (_, index) => (
+            <div
+              className="grid-row grid-skeleton-row"
+              key={`skeleton-${index}`}
+              style={{ transform: `translateY(${index * 38}px)`, height: 38, width: totalWidth }}
+            >
+              <span className="grid-skeleton-cell" />
+              <span className="grid-skeleton-cell short" />
+              <span className="grid-skeleton-cell" />
+            </div>
+          ))}
           {virtualRows.map((virtualRow) => {
             const record = props.records[virtualRow.index];
             if (!record) {
@@ -2324,6 +2611,22 @@ function DataGrid(props: {
               </div>
             );
           })}
+          {!props.initialLoading && (
+            <div className="grid-load-status" style={{ top: totalHeight, width: totalWidth }} role="status">
+              {props.loadMoreError ? (
+                <>
+                  <span>Couldn’t load more rows: {props.loadMoreError}</span>
+                  <button type="button" className="small-button" onClick={props.onLoadMore}>Retry</button>
+                </>
+              ) : props.loadingMore ? (
+                <><span className="loading-dot" /> Loading more rows…</>
+              ) : props.hasMore ? (
+                "Scroll to continue"
+              ) : (
+                `All ${props.records.length.toLocaleString()} records loaded`
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -2353,8 +2656,8 @@ function Selector(props: {
   );
 }
 
-async function api<T>(path: string): Promise<T> {
-  return request<T>(path);
+async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  return request<T>(path, init);
 }
 
 async function mutate<T>(path: string, body: unknown, method = "POST"): Promise<T> {

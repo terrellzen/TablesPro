@@ -141,6 +141,38 @@ export function registerViewRoutes(app: FastifyInstance<any, any, any, any, any>
       return mapError(request, reply, error);
     }
   });
+
+  app.delete("/api/tables/:tableId/views/:viewId", async (request, reply) => {
+    try {
+      const actor = await requireActor(request);
+      const tableId = readUuidParam(request.params, "tableId");
+      const viewId = readUuidParam(request.params, "viewId");
+      const { workspaceId } = await authorizeTable(actor, tableId, { resource: "view", action: "delete" });
+
+      const result = await pool.query(
+        "DELETE FROM app.saved_views WHERE saved_view_id = $1 AND table_id = $2 RETURNING saved_view_id, name",
+        [viewId, tableId]
+      );
+      if (result.rows.length === 0) {
+        throw new HttpError(404, "NOT_FOUND", "View not found");
+      }
+
+      await writeAuditEvent({
+        workspaceId,
+        actorUserId: actor.userId,
+        action: "view.delete",
+        entityType: "saved_view",
+        entityId: viewId,
+        requestId: request.id,
+        outcome: "success",
+        metadata: { tableId, name: result.rows[0].name }
+      });
+
+      return reply.status(204).send();
+    } catch (error) {
+      return mapError(request, reply, error);
+    }
+  });
 }
 
 function readUuidArray(value: unknown): string[] {

@@ -243,6 +243,107 @@ export function registerTableRoutes(app: FastifyInstance<any, any, any, any, any
     }
   });
 
+  app.post("/api/tables/:tableId/duplicate", async (request, reply) => {
+    const client = await pool.connect();
+    try {
+      const actor = await requireActor(request);
+      const sourceTableId = readUuidParam(request.params, "tableId");
+      const { workspaceId } = await authorizeTable(actor, sourceTableId, { resource: "table", action: "create" });
+
+      const srcTableResult = await pool.query(
+        "SELECT base_id, name FROM app.tables WHERE table_id = $1 AND deleted_at IS NULL",
+        [sourceTableId]
+      );
+      if (srcTableResult.rows.length === 0) throw new HttpError(404, "NOT_FOUND", "Source table not found");
+      const srcTable = srcTableResult.rows[0];
+
+      const fieldsResult = await pool.query(
+        "SELECT field_id, name, field_type, position, width, pinned, hidden, indexed, options FROM app.fields WHERE table_id = $1 AND tombstoned_at IS NULL ORDER BY position",
+        [sourceTableId]
+      );
+
+      await client.query("BEGIN");
+      const newTableResult = await client.query<{ table_id: string }>(
+        `
+          INSERT INTO app.tables (base_id, name, physical_table_name, created_by, updated_by)
+          VALUES ($1, $2, 'pending', $3, $3)
+          RETURNING table_id
+        `,
+        [srcTable.base_id, `${srcTable.name} (copy)`, actor.userId]
+      );
+      const newTable = requireReturnedRow(newTableResult.rows[0], "Table insert did not return a row");
+      const physicalTableName = toPhysicalTableName(newTable.table_id);
+      await client.query("UPDATE app.tables SET physical_table_name = $1 WHERE table_id = $2", [physicalTableName, newTable.table_id]);
+
+      const columnDefs: string[] = [];
+      const fieldIdMap = new Map<string, string>();
+      for (const field of fieldsResult.rows) {
+        const newFieldResult = await client.query<{ field_id: string }>(
+          `
+            INSERT INTO app.fields (table_id, name, physical_column_name, field_type, position, width, pinned, hidden, indexed, options, created_by, updated_by)
+            VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $10)
+            RETURNING field_id
+          `,
+          [newTable.table_id, field.name, field.field_type, field.position, field.width, field.pinned, field.hidden, field.indexed, JSON.stringify(field.options ?? {}), actor.userId]
+        );
+        const newFieldId = newFieldResult.rows[0]!.field_id;
+        fieldIdMap.set(field.field_id, newFieldId);
+        const physicalColumnName = toPhysicalFieldName(newFieldId);
+        await client.query("UPDATE app.fields SET physical_column_name = $1 WHERE field_id = $2", [physicalColumnName, newFieldId]);
+        columnDefs.push(`${quoteIdentifier(physicalColumnName)} ${fieldTypeToSql(field.field_type)}`);
+      }
+
+      await client.query(
+        `CREATE TABLE ${quoteAppDataTable(newTable.table_id)} (
+          record_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          created_at timestamptz NOT NULL DEFAULT now(),
+          created_by text NOT NULL,
+          updated_at timestamptz NOT NULL DEFAULT now(),
+          updated_by text NOT NULL,
+          row_version bigint NOT NULL DEFAULT 1,
+          deleted_at timestamptz${columnDefs.length > 0 ? "," : ""}
+          ${columnDefs.join(",\n          ")}
+        )`
+      );
+
+      if (fieldsResult.rows.length > 0) {
+        const srcPhysicalCols = ["record_id", "created_at", "created_by", "updated_at", "updated_by", "row_version", "deleted_at"];
+        const dstPhysicalCols = ["record_id", "created_at", "created_by", "updated_at", "updated_by", "row_version", "deleted_at"];
+        for (const field of fieldsResult.rows) {
+          const srcCol = toPhysicalFieldName(field.field_id);
+          const newFieldId = fieldIdMap.get(field.field_id)!;
+          const dstCol = toPhysicalFieldName(newFieldId);
+          srcPhysicalCols.push(quoteIdentifier(srcCol));
+          dstPhysicalCols.push(quoteIdentifier(dstCol));
+        }
+        await client.query(
+          `INSERT INTO ${quoteAppDataTable(newTable.table_id)} (${dstPhysicalCols.join(", ")})
+           SELECT ${srcPhysicalCols.join(", ")} FROM ${quoteAppDataTable(sourceTableId)} WHERE deleted_at IS NULL`
+        );
+      }
+
+      await client.query("COMMIT");
+
+      await writeAuditEvent({
+        workspaceId,
+        actorUserId: actor.userId,
+        action: "table.create",
+        entityType: "table",
+        entityId: newTable.table_id,
+        requestId: request.id,
+        outcome: "success",
+        metadata: { name: `${srcTable.name} (copy)`, baseId: srcTable.base_id, duplicatedFrom: sourceTableId }
+      });
+
+      return sendCreated(reply, { tableId: newTable.table_id, baseId: srcTable.base_id, name: `${srcTable.name} (copy)` });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      return mapError(request, reply, error);
+    } finally {
+      client.release();
+    }
+  });
+
   app.delete("/api/tables/:tableId/fields/:fieldId", async (request, reply) => {
     const client = await pool.connect();
     try {
@@ -251,21 +352,22 @@ export function registerTableRoutes(app: FastifyInstance<any, any, any, any, any
       const fieldId = readUuidParam(request.params, "fieldId");
       const { workspaceId } = await authorizeTable(actor, tableId, { resource: "field", action: "delete" });
 
-      const fieldResult = await pool.query(
-        "SELECT field_id, physical_column_name, name FROM app.fields WHERE field_id = $1 AND table_id = $2 AND tombstoned_at IS NULL",
+      await client.query("BEGIN");
+      const fieldResult = await client.query(
+        "SELECT field_id, physical_column_name, name, tombstoned_at FROM app.fields WHERE field_id = $1 AND table_id = $2 FOR UPDATE",
         [fieldId, tableId]
       );
-      if (fieldResult.rows.length === 0) {
-        throw new HttpError(404, "NOT_FOUND", "Field was not found");
-      }
       const field = fieldResult.rows[0];
+      if (!field || field.tombstoned_at) {
+        await client.query("COMMIT");
+        return reply.status(204).send();
+      }
 
-      await client.query("BEGIN");
       await client.query(
-        "UPDATE app.fields SET tombstoned_at = now(), updated_at = now(), updated_by = $1, row_version = row_version + 1 WHERE field_id = $2",
-        [actor.userId, fieldId]
+        "UPDATE app.fields SET tombstoned_at = now(), updated_at = now(), updated_by = $1, row_version = row_version + 1 WHERE field_id = $2 AND table_id = $3",
+        [actor.userId, fieldId, tableId]
       );
-      await client.query(`ALTER TABLE ${quoteAppDataTable(tableId)} DROP COLUMN ${quoteIdentifier(field.physical_column_name)}`);
+      await client.query(`ALTER TABLE ${quoteAppDataTable(tableId)} DROP COLUMN IF EXISTS ${quoteIdentifier(field.physical_column_name)}`);
       await client.query("COMMIT");
 
       await writeAuditEvent({

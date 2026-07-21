@@ -39,6 +39,7 @@ export function registerRecordRoutes(app: FastifyInstance<any, any, any, any, an
         "created_at",
         "created_by",
         "updated_at",
+        "updated_at::text AS updated_at_text",
         "updated_by",
         "row_version",
         ...selectedColumns
@@ -49,7 +50,7 @@ export function registerRecordRoutes(app: FastifyInstance<any, any, any, any, an
         fields.map((field) => ({ fieldId: field.field_id, fieldType: field.field_type }))
       );
       const params = [...compiledFilter.params];
-      const keysetSql = cursor && sort.length === 0 ? compileCursorWhere(cursor, tableId, params) : "";
+      const keysetSql = cursor ? compileCursorWhere(cursor, tableId, sort, fields, params) : "";
       params.push(limit + 1);
       const orderSql = compileOrderBy(sort, fields);
 
@@ -68,12 +69,24 @@ export function registerRecordRoutes(app: FastifyInstance<any, any, any, any, an
 
       const rows = result.rows.slice(0, limit);
       const nextCursor =
-        sort.length === 0 && result.rows.length > limit && rows.length > 0
+        result.rows.length > limit && rows.length > 0
           ? encodeCursor(
               {
                 tableId,
                 recordId: rows[rows.length - 1].record_id,
-                sort: [{ fieldId: "updated_at", direction: "desc", value: rows[rows.length - 1].updated_at }]
+                sort: sort.length > 0
+                  ? sort.map((entry) => {
+                      const field = fields.find((candidate) => candidate.field_id === entry.fieldId);
+                      if (!field) {
+                        throw new HttpError(400, "VALIDATION_ERROR", "One or more sort fields are invalid");
+                      }
+                      return {
+                        fieldId: entry.fieldId,
+                        direction: entry.direction,
+                        value: rows[rows.length - 1][field.physical_column_name]
+                      };
+                    })
+                  : [{ fieldId: "updated_at", direction: "desc", value: rows[rows.length - 1].updated_at_text }]
               },
               env.betterAuthSecret
             )
@@ -340,12 +353,69 @@ function readRecordValues(body: Record<string, unknown>): Record<string, unknown
   return values as Record<string, unknown>;
 }
 
-function compileCursorWhere(cursor: string, tableId: string, params: unknown[]): string {
+function compileCursorWhere(
+  cursor: string,
+  tableId: string,
+  sort: RecordSort[],
+  fields: FieldRow[],
+  params: unknown[]
+): string {
   const decoded = decodeCursor(cursor, env.betterAuthSecret);
   if (decoded.tableId !== tableId) {
     throw new HttpError(400, "VALIDATION_ERROR", "Cursor does not belong to this table");
   }
-  const updatedAt = decoded.sort.find((sort) => sort.fieldId === "updated_at")?.value;
-  params.push(updatedAt, decoded.recordId);
-  return `AND (updated_at, record_id) < ($${params.length - 1}::timestamptz, $${params.length}::uuid)`;
+
+  if (sort.length === 0) {
+    const updatedAt = decoded.sort.find((entry) => entry.fieldId === "updated_at")?.value;
+    if (updatedAt === undefined) {
+      throw new HttpError(400, "VALIDATION_ERROR", "Cursor does not match the requested sort");
+    }
+    params.push(updatedAt, decoded.recordId);
+    return `AND (updated_at, record_id) < ($${params.length - 1}::timestamptz, $${params.length}::uuid)`;
+  }
+
+  const fieldMap = new Map(fields.map((field) => [field.field_id, field]));
+  const cursorSort = new Map(decoded.sort.map((entry) => [entry.fieldId, entry]));
+  const branches: string[] = [];
+
+  for (let index = 0; index < sort.length; index += 1) {
+    const prefix: string[] = [];
+    for (let prefixIndex = 0; prefixIndex < index; prefixIndex += 1) {
+      const prefixSort = sort[prefixIndex]!;
+      const prefixField = fieldMap.get(prefixSort.fieldId);
+      const prefixCursor = cursorSort.get(prefixSort.fieldId);
+      if (!prefixField || !prefixCursor || prefixCursor.direction !== prefixSort.direction) {
+        throw new HttpError(400, "VALIDATION_ERROR", "Cursor does not match the requested sort");
+      }
+      params.push(prefixCursor.value);
+      prefix.push(`${quoteIdentifier(prefixField.physical_column_name)} IS NOT DISTINCT FROM $${params.length}`);
+    }
+
+    const entry = sort[index]!;
+    const field = fieldMap.get(entry.fieldId);
+    const cursorEntry = cursorSort.get(entry.fieldId);
+    if (!field || !cursorEntry || cursorEntry.direction !== entry.direction) {
+      throw new HttpError(400, "VALIDATION_ERROR", "Cursor does not match the requested sort");
+    }
+    if (cursorEntry.value === null) {
+      continue;
+    }
+    params.push(cursorEntry.value);
+    const column = quoteIdentifier(field.physical_column_name);
+    const operator = entry.direction === "asc" ? ">" : "<";
+    branches.push([...prefix, `(${column} ${operator} $${params.length} OR ${column} IS NULL)`].join(" AND "));
+  }
+
+  const equalPrefix = sort.map((entry) => {
+    const field = fieldMap.get(entry.fieldId);
+    const cursorEntry = cursorSort.get(entry.fieldId);
+    if (!field || !cursorEntry || cursorEntry.direction !== entry.direction) {
+      throw new HttpError(400, "VALIDATION_ERROR", "Cursor does not match the requested sort");
+    }
+    params.push(cursorEntry.value);
+    return `${quoteIdentifier(field.physical_column_name)} IS NOT DISTINCT FROM $${params.length}`;
+  });
+  params.push(decoded.recordId);
+  branches.push([...equalPrefix, `record_id > $${params.length}::uuid`].join(" AND "));
+  return `AND (${branches.map((branch) => `(${branch})`).join(" OR ")})`;
 }
