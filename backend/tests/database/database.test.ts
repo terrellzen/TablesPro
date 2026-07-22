@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createAuditDiff } from "./audit-diff.js";
-import { decodeCursor, encodeCursor } from "./cursor.js";
-import { sanitizeCsvCell } from "./csv-safety.js";
-import { compileFilter } from "./filter-compiler.js";
-import { calculateRetry } from "./job-retry.js";
-import { quoteAppDataTable, quoteIdentifier, toPhysicalFieldName } from "./safe-identifiers.js";
+import { createAuditDiff } from "../../packages/database/src/audit-diff.js";
+import { decodeCursor, encodeCursor } from "../../packages/database/src/cursor.js";
+import { sanitizeCsvCell } from "../../packages/database/src/csv-safety.js";
+import { compileFilter } from "../../packages/database/src/filter-compiler.js";
+import { calculateRetry } from "../../packages/database/src/job-retry.js";
+import { quoteAppDataTable, quoteIdentifier, toPhysicalFieldName } from "../../packages/database/src/safe-identifiers.js";
 
 const id = "018f2f92-3fd5-7c10-9f9a-f1bba5800001";
 const fieldId = "018f2f92-3fd5-7c10-9f9a-f1bba5800002";

@@ -48,19 +48,36 @@ export function ContextMenu(props: {
   return (
     <div className="context-menu-overlay" onClick={props.onClose}>
       <div className="context-menu" style={{ left: props.x, top: props.y }} onClick={(event) => event.stopPropagation()}>
-        {props.items.map((item, index) => item.divider ? (
-          <div key={index} className="context-menu-divider" />
-        ) : (
-          <button
-            key={index}
-            type="button"
-            className={`context-menu-item${item.className ? ` ${item.className}` : ""}`}
-            onClick={() => { item.onClick(); props.onClose(); }}
-          >
-            {item.label}
-          </button>
-        ))}
+        <ContextMenuItems items={props.items} onSelect={props.onClose} />
       </div>
     </div>
   );
+}
+
+function ContextMenuItems(props: { items: ContextMenuItem[]; onSelect: () => void }) {
+  return props.items.map((item, index) => item.divider ? (
+    <div key={index} className="context-menu-divider" />
+  ) : (
+    <div key={`${item.label}:${index}`} className={`context-menu-entry${item.children ? " has-submenu" : ""}`}>
+      <button
+        type="button"
+        className={`context-menu-item${item.className ? ` ${item.className}` : ""}`}
+        aria-haspopup={item.children ? "menu" : undefined}
+        onClick={() => {
+          if (!item.onClick || item.children) return;
+          item.onClick();
+          props.onSelect();
+        }}
+      >
+        {item.swatch && <span className="context-menu-swatch" style={{ backgroundColor: item.swatch }} />}
+        <span>{item.label}</span>
+        {item.children && <span className="context-menu-arrow">›</span>}
+      </button>
+      {item.children && (
+        <div className="context-submenu" role="menu">
+          <ContextMenuItems items={item.children} onSelect={props.onSelect} />
+        </div>
+      )}
+    </div>
+  ));
 }

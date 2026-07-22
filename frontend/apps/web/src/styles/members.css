@@ -1,0 +1,142 @@
+.members-dialog {
+  width: min(940px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.members-dialog-header,
+.members-dialog-header > div,
+.members-dialog-actions {
+  display: flex;
+  align-items: center;
+}
+
+.members-dialog-header {
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.members-dialog-header > div {
+  gap: 9px;
+}
+
+.members-dialog-header h3,
+.permission-section h4 {
+  margin: 0;
+}
+
+.members-dialog-header span,
+.permission-section p,
+.permission-copy small,
+.permission-copy em {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.member-list-view,
+.member-editor-view {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.add-member-button {
+  margin-bottom: 12px;
+}
+
+.members-dialog .member-row {
+  grid-template-columns: minmax(0, 1fr) auto 34px;
+}
+
+.members-dialog .member-row span {
+  white-space: normal;
+}
+
+.member-editor-view {
+  display: grid;
+  gap: 14px;
+}
+
+.permission-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.permission-section {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+
+.permission-section p {
+  margin: 3px 0 4px;
+}
+
+.permission-control {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.permission-copy,
+.permission-copy strong,
+.permission-copy small,
+.permission-copy em {
+  display: block;
+}
+
+.permission-copy em {
+  margin-top: 3px;
+  font-style: normal;
+}
+
+.permission-copy .direct-access {
+  color: var(--color-primary);
+}
+
+.permission-control select {
+  min-height: 34px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 0 8px;
+}
+
+.access-summary {
+  display: grid;
+  gap: 3px;
+  border-left: 3px solid var(--color-primary);
+  background: var(--color-secondary);
+  padding: 10px 12px;
+}
+
+.permission-error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: 13px;
+}
+
+.members-dialog-actions {
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 680px) {
+  .permission-control {
+    grid-template-columns: 1fr;
+  }
+}

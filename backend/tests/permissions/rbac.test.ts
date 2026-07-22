@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isAllowed } from "./rbac.js";
+import { isAllowed } from "../../packages/permissions/src/rbac.js";
 
 describe("RBAC permissions", () => {
   it("allows admins to manage tables", () => {

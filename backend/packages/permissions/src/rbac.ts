@@ -1,5 +1,6 @@
 export const workspaceRoles = ["admin", "editor", "viewer"] as const;
 export type WorkspaceRole = (typeof workspaceRoles)[number];
+export type AuthorizationRole = WorkspaceRole | "restricted";
 
 export const appPermissions = {
   workspace: ["read", "update", "delete"],
@@ -24,13 +25,13 @@ export type Permission = {
 }[PermissionResource];
 
 export type PermissionOverride = {
-  role?: WorkspaceRole;
+  role?: AuthorizationRole;
   allow?: Permission[];
   deny?: Permission[];
 };
 
 export type AuthorizationSubject = {
-  workspaceRole: WorkspaceRole;
+  workspaceRole: AuthorizationRole;
   baseOverride?: PermissionOverride | undefined;
   tableOverride?: PermissionOverride | undefined;
 };
@@ -53,13 +54,12 @@ const rolePermissions = {
   ],
   editor: [
     "workspace:read",
+    "workspace:update",
     "member:read",
-    "base:read",
-    "table:read",
-    "field:read",
-    "view:read",
-    "view:create",
-    "view:update",
+    "base:*",
+    "table:*",
+    "field:*",
+    "view:*",
     "record:*"
   ],
   viewer: [
@@ -71,10 +71,11 @@ const rolePermissions = {
     "view:read",
     "record:read",
     "record:export"
-  ]
-} as const satisfies Record<WorkspaceRole, readonly string[]>;
+  ],
+  restricted: ["workspace:read"]
+} as const satisfies Record<AuthorizationRole, readonly string[]>;
 
-export function can(role: WorkspaceRole, permission: Permission): boolean {
+export function can(role: AuthorizationRole, permission: Permission): boolean {
   const grants = rolePermissions[role];
   return grants.some((grant) => grantMatches(grant, permission));
 }

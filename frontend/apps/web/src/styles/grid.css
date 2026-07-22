@@ -1,15 +1,11 @@
 .content-grid {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   gap: 14px;
   padding: 14px 20px;
   overflow: hidden;
-}
-
-.right-rail {
-  display: grid;
 }
 
 .grid-shell {
@@ -167,6 +163,11 @@
   white-space: nowrap;
 }
 
+.grid-cell {
+  display: flex;
+  align-items: center;
+}
+
 .grid-cell:hover {
   background: var(--color-secondary);
 }
@@ -234,4 +235,3 @@
     animation: none;
   }
 }
-

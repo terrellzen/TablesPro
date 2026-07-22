@@ -68,8 +68,8 @@ try {
   console.log("You can now sign in at the application.");
   console.log("Change the default password after your first login.");
   console.log("");
-} catch (error: any) {
-  if (error?.message?.includes("already exists") || error?.body?.message?.includes("already exists")) {
+} catch (error) {
+  if (isDuplicateAccountError(error)) {
     console.log("A user with this email already exists — skipping seed.");
     process.exit(0);
   }
@@ -77,4 +77,13 @@ try {
 } finally {
   client.release();
   await pool.end();
+}
+
+function isDuplicateAccountError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { message?: unknown; body?: unknown };
+  if (typeof candidate.message === "string" && candidate.message.includes("already exists")) return true;
+  if (!candidate.body || typeof candidate.body !== "object") return false;
+  const body = candidate.body as { message?: unknown };
+  return typeof body.message === "string" && body.message.includes("already exists");
 }

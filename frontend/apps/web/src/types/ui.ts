@@ -2,9 +2,11 @@ import type { FieldType } from "./domain.js";
 
 export type ContextMenuItem = {
   label: string;
-  onClick: () => void;
+  onClick?: () => void;
   className?: string;
   divider?: boolean;
+  children?: ContextMenuItem[];
+  swatch?: string;
 };
 
 export type ModalEntity = {

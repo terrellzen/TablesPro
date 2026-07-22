@@ -1,0 +1,152 @@
+.audit-full-list {
+  display: grid;
+  gap: 0;
+}
+
+.audit-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.audit-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.audit-filter select {
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.audit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 13px;
+}
+
+.audit-row:last-child {
+  border-bottom: none;
+}
+
+.audit-row-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.audit-action {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.audit-entity {
+  color: var(--color-text-muted);
+}
+
+.audit-workspace {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: var(--radius-md);
+  background: var(--color-border);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.audit-table-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.audit-actor {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.audit-row-main time {
+  margin-left: auto;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.audit-diff {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  background: var(--color-border);
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.audit-diff-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.audit-diff-field {
+  color: var(--color-text-muted);
+  min-width: 70px;
+}
+
+.audit-diff-before {
+  color: var(--color-danger);
+  text-decoration: line-through;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audit-diff-arrow {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.audit-diff-after {
+  color: var(--color-success);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audit-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.audit-meta-tag {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: var(--radius-md);
+  background: var(--color-border);
+  color: var(--color-text-muted);
+}
+

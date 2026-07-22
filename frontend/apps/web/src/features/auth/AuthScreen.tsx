@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Database, LogIn } from "lucide-react";
 import { ThemeControl } from "../../components/ThemeControl.js";
 import { mutate } from "../../lib/api.js";
@@ -32,7 +32,7 @@ export function AuthScreen(props: {
     }
   }, [mode, props.signUpEnabled]);
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
     setStatus({ tone: "idle", text: mode === "sign-in" ? "Signing in" : "Creating account" });

@@ -26,8 +26,16 @@
     "db:stop": "pg_ctl stop -D ${PGDATA:-./.local/postgres}"
   },
   "devDependencies": {
+    "@devcontainers/cli": "^0.87.0",
     "@types/node": "^22.13.1",
     "typescript": "^5.7.3",
     "vitest": "^3.0.5"
+  },
+  "dependencies": {
+    "@openai/codex": "^0.145.0",
+    "opencode-ai": "^1.18.4"
+  },
+  "allowScripts": {
+    "opencode-ai@1.18.4": true
   }
 }

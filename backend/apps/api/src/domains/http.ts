@@ -68,10 +68,17 @@ export function readOptionalString(source: Record<string, unknown>, key: string)
 
 export function readUuidParam(params: unknown, key: string): string {
   const value = (params as Record<string, unknown>)[key];
-  if (typeof value !== "string" || !/^[0-9a-fA-F-]{32,36}$/.test(value)) {
+  const uuidPattern = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+  if (typeof value !== "string" || !uuidPattern.test(value)) {
     throw new HttpError(400, "VALIDATION_ERROR", `${key} must be a UUID`);
   }
   return value;
+}
+
+export function readOptionalUuid(source: Record<string, unknown>, key: string): string | null {
+  const value = source[key];
+  if (value === undefined || value === null || value === "") return null;
+  return readUuidParam(source, key);
 }
 
 export function readLimit(query: unknown, fallback = 100, max = 500): number {

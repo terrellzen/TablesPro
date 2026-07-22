@@ -1,9 +1,12 @@
 export type ThemePreference = "light" | "dark" | "system";
+export type WorkspaceRole = "admin" | "editor" | "viewer";
+export type WorkspaceAccessRole = WorkspaceRole | "restricted";
+export type AccessLevel = "read" | "edit" | "admin";
 
 export type Workspace = {
   workspace_id: string;
   name: string;
-  role: string;
+  role: WorkspaceAccessRole;
 };
 
 export type Base = {
@@ -43,6 +46,11 @@ export type Field = {
   width: number;
   hidden: boolean;
   pinned: boolean;
+  options: FieldOptions;
+};
+
+export type FieldOptions = {
+  choiceColors?: Record<string, string>;
 };
 
 export type RecordRow = {
@@ -87,7 +95,11 @@ export type AdminWorkspace = {
 
 export type AdminBase = { base_id: string; name: string };
 export type AdminTable = { table_id: string; name: string };
-export type WorkspaceRole = "admin" | "editor" | "viewer";
+export type MemberPermissions = {
+  workspace: AccessLevel | null;
+  bases: Record<string, AccessLevel>;
+  tables: Record<string, { table?: AccessLevel; record?: AccessLevel }>;
+};
 
 export type WorkspaceMember = {
   workspace_id: string;
@@ -95,8 +107,14 @@ export type WorkspaceMember = {
   handle: string | null;
   display_name: string | null;
   role: WorkspaceRole;
+  permissions: MemberPermissions | null;
   created_at: string;
   updated_at: string;
+};
+
+export type PermissionResources = {
+  bases: Base[];
+  tables: AppTable[];
 };
 
 export type PageEnvelope<T> = {
@@ -115,6 +133,15 @@ export type UserProfile = {
   can_create_workspaces: boolean;
   can_manage_users: boolean;
   disabled_at: string | null;
+};
+
+export type CreateUserInput = {
+  email: string;
+  password: string;
+  handle: string;
+  displayName: string;
+  canCreateWorkspaces: boolean;
+  canManageUsers: boolean;
 };
 
 export type AuthEnvelope = { user?: AuthUser; profile?: UserProfile | null };

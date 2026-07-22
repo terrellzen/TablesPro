@@ -4,7 +4,7 @@ import { authorizeTable, requireActor } from "./authz.js";
 import { writeAuditEvent } from "./audit.js";
 import { mapError, readBodyObject, readOptionalString, readRequiredString, readUuidParam, sendCreated, sendOk } from "./http.js";
 
-export function registerFieldGroupRoutes(app: FastifyInstance<any, any, any, any, any>): void {
+export function registerFieldGroupRoutes(app: FastifyInstance): void {
   app.get("/api/tables/:tableId/field-groups", async (request, reply) => {
     try {
       const actor = await requireActor(request);

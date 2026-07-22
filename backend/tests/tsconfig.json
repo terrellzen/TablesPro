@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "..",
+    "paths": {
+      "@tablespro/contracts": ["../packages/contracts/src/index.ts"],
+      "@tablespro/database": ["../packages/database/src/index.ts"],
+      "@tablespro/permissions": ["../packages/permissions/src/index.ts"]
+    }
+  },
+  "include": ["**/*.ts"]
+}

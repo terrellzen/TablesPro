@@ -1,0 +1,49 @@
+.cell-select {
+  appearance: auto;
+  cursor: pointer;
+}
+
+.boolean-value {
+  display: inline-flex;
+  width: 17px;
+  height: 17px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 5px;
+  background: var(--color-surface-solid);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.boolean-value.checked {
+  border-color: var(--color-success);
+  background: var(--color-success);
+}
+
+.dropdown-value {
+  display: inline-block;
+  max-width: 100%;
+  padding: 2px 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.cell-link {
+  display: block;
+  overflow: hidden;
+  color: var(--color-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-link:hover {
+  text-decoration: underline;
+}

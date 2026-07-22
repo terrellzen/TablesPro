@@ -1,0 +1,161 @@
+.member-list,
+.invite-list,
+.user-list {
+  display: grid;
+}
+
+.member-row,
+.invite-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.invite-row {
+  grid-template-columns: minmax(0, 1fr) 34px;
+}
+
+.member-row strong,
+.member-row span,
+.invite-row strong,
+.invite-row span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-row strong,
+.invite-row strong {
+  font-size: 13px;
+}
+
+.member-row span,
+.invite-row span {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.invite-row.muted {
+  opacity: 0.55;
+}
+
+.inline-heading {
+  height: auto;
+  padding: 0;
+  border-bottom: 0;
+  font-size: 13px;
+}
+
+.user-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 0;
+  border-top: 1px solid var(--color-border);
+  font-size: 12px;
+}
+
+.user-row strong,
+.user-row span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-row span {
+  color: var(--color-text-muted);
+}
+
+.user-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-muted);
+}
+
+.icon-button.danger {
+  color: var(--color-danger);
+}
+
+.audit-list {
+  height: 100%;
+  overflow: auto;
+}
+
+.audit-item {
+  display: grid;
+  gap: 2px;
+  padding: 10px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 12px;
+}
+
+.audit-item strong,
+.audit-item span,
+.audit-item time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audit-item span,
+.audit-item time {
+  color: var(--color-text-muted);
+}
+
+.empty-state {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  min-height: 320px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+
+.empty-state span {
+  max-width: 360px;
+  text-align: center;
+}
+
+.workspace-empty {
+  height: calc(100vh - 238px);
+}
+
+.status-bar {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.status-bar.success {
+  color: var(--color-success);
+}
+
+.status-bar.danger {
+  color: var(--color-danger);
+}
+
+.icon-button:focus-visible,
+.grid-cell:focus-visible,
+.view-tabs button:focus-visible,
+.workspace-item:focus-visible,
+.command-button:focus-visible,
+.small-button:focus-visible,
+.selector:focus-within {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}

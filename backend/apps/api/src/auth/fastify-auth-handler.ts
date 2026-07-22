@@ -3,7 +3,7 @@ import { fromNodeHeaders } from "better-auth/node";
 import { auth } from "./auth.js";
 import { env } from "../env.js";
 
-export function registerAuthRoutes(app: FastifyInstance<any, any, any, any, any>): void {
+export function registerAuthRoutes(app: FastifyInstance): void {
   app.route({
     method: ["GET", "POST"],
     url: "/api/auth/*",

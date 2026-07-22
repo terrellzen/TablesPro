@@ -4,7 +4,7 @@ import { authorizeTable, requireActor } from "./authz.js";
 import { writeAuditEvent } from "./audit.js";
 import { HttpError, mapError, readBodyObject, readOptionalString, readRequiredString, readUuidParam, sendCreated, sendOk } from "./http.js";
 
-export function registerViewRoutes(app: FastifyInstance<any, any, any, any, any>): void {
+export function registerViewRoutes(app: FastifyInstance): void {
   app.get("/api/tables/:tableId/views", async (request, reply) => {
     try {
       const actor = await requireActor(request);

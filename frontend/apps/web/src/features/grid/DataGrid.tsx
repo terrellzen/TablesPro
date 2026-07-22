@@ -3,6 +3,10 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Table2, Trash2 } from "lucide-react";
 import type { Field, RecordRow } from "../../types/domain.js";
 import type { ContextMenuItem } from "../../types/ui.js";
+import { buildFieldContextMenu } from "./fieldContextMenu.js";
+import { GridCellEditor, GridCellValue } from "./GridCellContent.js";
+import { fieldTypeLabel } from "./fieldDisplay.js";
+import type { DropdownOptionsByField } from "./useDropdownOptions.js";
 
 type DataGridProps = {
   fields: Field[];
@@ -19,6 +23,8 @@ type DataGridProps = {
   onMoveField: (fieldId: string, direction: "left" | "right" | "start" | "end") => void;
   onHideField: (fieldId: string) => void;
   onDeleteField: (fieldId: string) => void;
+  dropdownOptions: DropdownOptionsByField;
+  onSetDropdownColor: (fieldId: string, value: string, color: string) => void;
   onContextMenu: (x: number, y: number, items: ContextMenuItem[]) => void;
   onLoadMore?: () => void;
   hasMore?: boolean;
@@ -87,23 +93,20 @@ export function DataGrid(props: DataGridProps) {
                 style={{ left: virtualColumn.start, width: virtualColumn.size }}
                 onContextMenu={(event) => {
                   event.preventDefault();
-                  const fieldIndex = props.allFields.findIndex((candidate) => candidate.field_id === field.field_id);
-                  const items: ContextMenuItem[] = [{ label: "Rename", onClick: () => props.onRenameField(field.field_id, field.name) }];
-                  if (fieldIndex > 0) {
-                    items.push({ label: "Move left", onClick: () => props.onMoveField(field.field_id, "left") });
-                    items.push({ label: "Move to beginning", onClick: () => props.onMoveField(field.field_id, "start") });
-                  }
-                  if (fieldIndex < props.allFields.length - 1) {
-                    items.push({ label: "Move right", onClick: () => props.onMoveField(field.field_id, "right") });
-                    items.push({ label: "Move to end", onClick: () => props.onMoveField(field.field_id, "end") });
-                  }
-                  items.push({ label: "Hide column", onClick: () => props.onHideField(field.field_id) });
-                  items.push({ label: "", onClick: () => {}, divider: true });
-                  items.push({ label: "Delete column", onClick: () => props.onDeleteField(field.field_id), className: "danger" });
+                  const items: ContextMenuItem[] = buildFieldContextMenu({
+                    field,
+                    allFields: props.allFields,
+                    dropdownOptions: props.dropdownOptions[field.field_id],
+                    onRename: () => props.onRenameField(field.field_id, field.name),
+                    onMove: (direction) => props.onMoveField(field.field_id, direction),
+                    onHide: () => props.onHideField(field.field_id),
+                    onDelete: () => props.onDeleteField(field.field_id),
+                    onSetDropdownColor: (value, color) => props.onSetDropdownColor(field.field_id, value, color)
+                  });
                   props.onContextMenu(event.clientX, event.clientY, items);
                 }}
               >
-                <span>{field.name}</span><small>{field.field_type}</small>
+                <span>{field.name}</span><small>{fieldTypeLabel(field.field_type)}</small>
               </div>
             );
           })}
@@ -127,21 +130,30 @@ export function DataGrid(props: DataGridProps) {
                   return (
                     <div className="grid-cell-wrap" key={`${record.record_id}:${field.field_id}`} style={{ left: virtualColumn.start, width: virtualColumn.size }}>
                       {isEditing ? (
-                        <input
-                          className="cell-input"
-                          autoFocus
+                        <GridCellEditor
+                          field={field}
                           value={props.draftValue}
-                          onChange={(event) => props.onDraftChange(event.target.value)}
-                          onBlur={() => void props.onSaveCell(record, field)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") void props.onSaveCell(record, field);
-                            if (event.key === "Escape") props.onCancelEdit();
-                          }}
+                          suggestions={props.dropdownOptions[field.field_id]?.values ?? []}
+                          onChange={props.onDraftChange}
+                          onSave={() => void props.onSaveCell(record, field)}
+                          onCancel={props.onCancelEdit}
                         />
                       ) : (
-                        <button type="button" className="grid-cell" onDoubleClick={() => props.onStartEdit(record, field)}>
-                          {String(record[field.physical_column_name] ?? "")}
-                        </button>
+                        <div
+                          className="grid-cell"
+                          role="button"
+                          tabIndex={0}
+                          onDoubleClick={() => props.onStartEdit(record, field)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") props.onStartEdit(record, field);
+                          }}
+                        >
+                          <GridCellValue
+                            field={field}
+                            value={record[field.physical_column_name]}
+                            color={props.dropdownOptions[field.field_id]?.colors[String(record[field.physical_column_name] ?? "")]}
+                          />
+                        </div>
                       )}
                     </div>
                   );

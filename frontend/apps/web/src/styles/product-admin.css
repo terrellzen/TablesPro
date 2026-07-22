@@ -1,0 +1,92 @@
+.audit-panel,
+.admin-panel,
+.admin-page-content .admin-section,
+.admin-page-content .create-user-form,
+.password-change-form {
+  border-color: var(--color-border);
+  border-radius: 15px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.panel-heading {
+  height: 42px;
+  padding: 0 13px;
+  border-bottom-color: var(--color-border);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.admin-section,
+.create-user-form {
+  padding: 13px;
+}
+
+.member-row,
+.invite-row,
+.user-row,
+.audit-row,
+.db-table-row {
+  border-color: var(--color-border);
+}
+
+.admin-page-header {
+  padding: 20px 22px 0;
+}
+
+.admin-page-header h2 {
+  font-size: 21px;
+  letter-spacing: -0.03em;
+}
+
+.admin-tabs {
+  gap: 6px;
+  padding: 14px 22px 0;
+  border-color: var(--color-border);
+}
+
+.admin-tabs button {
+  border-radius: 9px 9px 0 0;
+}
+
+.admin-page-content {
+  padding: 18px 22px;
+}
+
+.badge,
+.audit-table-badge,
+.audit-workspace,
+.audit-meta-tag {
+  border-radius: 999px;
+}
+
+.empty-state {
+  border-color: var(--color-border-strong);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--color-surface-solid) 72%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+
+.empty-state svg {
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  border-radius: 9px;
+  background: var(--color-secondary);
+  color: var(--color-primary);
+}
+
+.empty-state strong {
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.status-bar {
+  min-height: 30px;
+  padding: 0 22px;
+  border-color: var(--color-border);
+  background: color-mix(in srgb, var(--color-surface-solid) 64%, transparent);
+  backdrop-filter: blur(18px);
+  font-size: 11px;
+}

@@ -7,7 +7,7 @@
     "dev": "cd apps/web && vite --host 0.0.0.0",
     "build:packages": "tsc -p packages/ui/tsconfig.json",
     "build": "npm run build:packages && tsc -p apps/web/tsconfig.json --noEmit && cd apps/web && vite build",
-    "typecheck": "tsc -p packages/ui/tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
+    "typecheck": "tsc -p packages/ui/tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit && tsc -p tests/tsconfig.json",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {

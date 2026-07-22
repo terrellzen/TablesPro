@@ -1,0 +1,140 @@
+.empty-text {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  padding: 8px 10px;
+}
+
+.db-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 12px 10px;
+}
+
+.db-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.db-stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.db-stat-value {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.db-stat-warning {
+  color: var(--color-warning);
+}
+
+.db-warning-banner {
+  padding: 8px 10px;
+  margin: 0 10px 10px;
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-warning) 8%, transparent);
+  color: var(--color-warning);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.db-table-list {
+  display: grid;
+  gap: 0;
+}
+
+.db-table-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 13px;
+}
+
+.db-table-row:last-child {
+  border-bottom: none;
+}
+
+.db-table-header {
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.db-table-name {
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.password-change-form {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  margin-bottom: 12px;
+}
+
+.admin-password-form {
+  border-left: 3px solid var(--color-primary);
+}
+
+.stacked-field {
+  display: grid;
+  gap: 5px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.stacked-field input {
+  height: 34px;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-elevated);
+  color: var(--color-text);
+  padding: 0 9px;
+}
+
+.inline-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.role-select {
+  flex: 1 1 120px;
+  height: 34px;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-elevated);
+  color: var(--color-text);
+  padding: 0 8px;
+}
+
+.small-button.primary {
+  background: var(--color-primary);
+  color: var(--color-primary-foreground);
+  border-color: var(--color-primary);
+}
+
+.small-button.danger {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+.small-button.danger:hover {
+  background: var(--color-danger);
+  color: white;
+}

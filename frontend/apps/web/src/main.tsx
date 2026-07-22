@@ -5,10 +5,20 @@ import { useAppController } from "./features/app/useAppController.js";
 import { applyThemePreference, readThemePreference } from "./lib/theme.js";
 import "./styles/theme.css";
 import "./styles/app.css";
+import "./styles/workspace.css";
 import "./styles/grid.css";
+import "./styles/dropdown.css";
+import "./styles/members.css";
 import "./styles/admin.css";
+import "./styles/admin-audit.css";
+import "./styles/admin-database.css";
+import "./styles/admin-workspace.css";
 import "./styles/overlays.css";
 import "./styles/product.css";
+import "./styles/product-workspace.css";
+import "./styles/product-admin.css";
+import "./styles/product-overlays.css";
+import "./styles/product-auth.css";
 
 applyThemePreference(readThemePreference(), window.matchMedia("(prefers-color-scheme: dark)").matches);
 

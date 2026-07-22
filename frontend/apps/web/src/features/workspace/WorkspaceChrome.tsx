@@ -18,6 +18,7 @@ export function WorkspaceSidebar(props: {
   onDeleteWorkspace: () => void;
   onDuplicateWorkspace: (workspaceId: string) => void;
   onRenameWorkspace: (workspace: Workspace) => void;
+  onManageMembers: (workspace: Workspace) => void;
   onContextMenu: (x: number, y: number, items: ContextMenuItem[]) => void;
   onApiServerChange: (url: string) => Promise<void>;
   onProfileChange: (profile: UserProfile) => void;
@@ -43,7 +44,12 @@ export function WorkspaceSidebar(props: {
         onChangePassword={props.onChangePassword}
       />
       {props.profile?.can_manage_users && (
-        <button type="button" className={`command-button ${props.showAdmin ? "active" : ""}`} onClick={() => props.onShowAdminChange(!props.showAdmin)}>
+        <button
+          type="button"
+          className={`command-button admin-command ${props.showAdmin ? "active" : ""}`}
+          aria-pressed={props.showAdmin}
+          onClick={() => props.onShowAdminChange(!props.showAdmin)}
+        >
           <ShieldCheck size={16} /> Admin
         </button>
       )}
@@ -59,15 +65,17 @@ export function WorkspaceSidebar(props: {
               onClick={() => props.onWorkspaceChange(workspace.workspace_id)}
               onContextMenu={(event) => {
                 event.preventDefault();
-                props.onContextMenu(event.clientX, event.clientY, [
+                const items: ContextMenuItem[] = [
                   { label: "Rename", onClick: () => props.onRenameWorkspace(workspace) },
                   { label: "Duplicate", onClick: () => props.onDuplicateWorkspace(workspace.workspace_id) }
-                ]);
+                ];
+                if (workspace.role === "admin") items.unshift({ label: "Workspace members", onClick: () => props.onManageMembers(workspace) });
+                props.onContextMenu(event.clientX, event.clientY, items);
               }}
             >
               {workspace.name}
             </button>
-            {workspace.workspace_id === props.selectedWorkspaceId && (
+            {workspace.workspace_id === props.selectedWorkspaceId && workspace.role === "admin" && (
               <button type="button" className="icon-button danger" onClick={props.onDeleteWorkspace} aria-label={`Delete workspace ${workspace.name}`}>
                 <Trash2 size={14} />
               </button>

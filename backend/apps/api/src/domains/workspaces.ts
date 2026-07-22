@@ -7,13 +7,16 @@ import { requireCanCreateWorkspaces } from "./users.js";
 import { quoteAppDataTable, quoteIdentifier, toPhysicalFieldName, toPhysicalTableName } from "@tablespro/database";
 import { fieldTypeToSql } from "./field-types.js";
 
-export function registerWorkspaceRoutes(app: FastifyInstance<any, any, any, any, any>): void {
+export function registerWorkspaceRoutes(app: FastifyInstance): void {
   app.get("/api/workspaces", async (request, reply) => {
     try {
       const actor = await requireActor(request);
       const result = await pool.query(
         `
-          SELECT w.workspace_id, w.name, wm.role, w.created_at, w.updated_at, w.row_version
+          SELECT w.workspace_id, w.name,
+                 CASE WHEN wm.permissions IS NOT NULL AND wm.permissions->>'workspace' IS NULL
+                   THEN 'restricted' ELSE wm.role::text END AS role,
+                 w.created_at, w.updated_at, w.row_version
           FROM app.workspaces w
           JOIN app.workspace_members wm ON wm.workspace_id = w.workspace_id
           WHERE wm.user_id = $1 AND w.deleted_at IS NULL

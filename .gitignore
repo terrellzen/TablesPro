@@ -5,3 +5,5 @@ dist
 .local
 coverage
 *.log
+.devcontainer/devcontainer.json
+.devcontainer/devcontainer-lock.json

@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { UserPlus } from "lucide-react";
-import type { UserProfile } from "../../types/domain.js";
+import type { CreateUserInput, UserProfile } from "../../types/domain.js";
 
 export function CreateUserForm(props: {
-  onCreateUser: (fields: { email: string; password: string; handle: string; displayName: string; canCreateWorkspaces: boolean; canManageUsers: boolean }) => Promise<UserProfile | undefined>;
+  onCreateUser: (fields: CreateUserInput) => Promise<UserProfile | undefined>;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -13,7 +13,7 @@ export function CreateUserForm(props: {
   const [canManageUsers, setCanManageUsers] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  async function submit(event: React.FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     const result = await props.onCreateUser({

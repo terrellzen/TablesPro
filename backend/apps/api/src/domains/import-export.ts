@@ -4,7 +4,7 @@ import { authorizeTable, requireActor } from "./authz.js";
 import { writeAuditEvent } from "./audit.js";
 import { mapError, readBodyObject, readOptionalString, readUuidParam, requireReturnedRow, sendCreated } from "./http.js";
 
-export function registerImportExportRoutes(app: FastifyInstance<any, any, any, any, any>): void {
+export function registerImportExportRoutes(app: FastifyInstance): void {
   app.post("/api/tables/:tableId/import-jobs", async (request, reply) => {
     const client = await pool.connect();
     try {

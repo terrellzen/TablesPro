@@ -6,20 +6,31 @@ import { mapError, readBodyObject, readRequiredString, readUuidParam, requireRet
 import { quoteAppDataTable, quoteIdentifier, toPhysicalFieldName, toPhysicalTableName } from "@tablespro/database";
 import { fieldTypeToSql } from "./field-types.js";
 
-export function registerBaseRoutes(app: FastifyInstance<any, any, any, any, any>): void {
+export function registerBaseRoutes(app: FastifyInstance): void {
   app.get("/api/workspaces/:workspaceId/bases", async (request, reply) => {
     try {
       const actor = await requireActor(request);
       const workspaceId = readUuidParam(request.params, "workspaceId");
-      await authorizeWorkspace(actor, workspaceId, { resource: "base", action: "read" });
+      await authorizeWorkspace(actor, workspaceId, { resource: "workspace", action: "read" });
       const result = await pool.query(
         `
-          SELECT base_id, workspace_id, name, created_at, updated_at, row_version
-          FROM app.bases
-          WHERE workspace_id = $1 AND deleted_at IS NULL
-          ORDER BY updated_at DESC, base_id DESC
+          SELECT b.base_id, b.workspace_id, b.name, b.created_at, b.updated_at, b.row_version
+          FROM app.bases b
+          JOIN app.workspace_members wm ON wm.workspace_id = b.workspace_id AND wm.user_id = $2
+          WHERE b.workspace_id = $1 AND b.deleted_at IS NULL
+            AND (
+              wm.permissions IS NULL
+              OR wm.permissions->>'workspace' IS NOT NULL
+              OR wm.permissions->'bases' ? b.base_id::text
+              OR EXISTS (
+                SELECT 1 FROM app.tables scoped_table
+                WHERE scoped_table.base_id = b.base_id
+                  AND wm.permissions->'tables' ? scoped_table.table_id::text
+              )
+            )
+          ORDER BY b.updated_at DESC, b.base_id DESC
         `,
-        [workspaceId]
+        [workspaceId, actor.userId]
       );
       return sendOk(result.rows);
     } catch (error) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Database, LogOut, UserRound } from "lucide-react";
 import { mutate } from "../../lib/api.js";
 import { errorMessage } from "../../lib/format.js";
@@ -53,7 +53,7 @@ export function AccountBlock(props: {
     }
   }
 
-  async function submitPassword(event: React.FormEvent) {
+  async function submitPassword(event: FormEvent) {
     event.preventDefault();
     if (newPassword !== confirmPassword) {
       setPasswordStatus("Passwords do not match");

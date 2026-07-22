@@ -3,7 +3,7 @@ import { pool } from "../db/pool.js";
 import { authorizeWorkspace, requireActor } from "./authz.js";
 import { mapError, readLimit, readUuidParam } from "./http.js";
 
-export function registerAuditRoutes(app: FastifyInstance<any, any, any, any, any>): void {
+export function registerAuditRoutes(app: FastifyInstance): void {
   app.get("/api/workspaces/:workspaceId/audit-events", async (request, reply) => {
     try {
       const actor = await requireActor(request);

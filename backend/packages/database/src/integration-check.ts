@@ -28,9 +28,42 @@ const auditTrigger = await pool.query(`
     AND tgrelid = 'app.audit_events'::regclass
 `);
 
+const memberPermissionsColumn = await pool.query(`
+  SELECT 1
+  FROM information_schema.columns
+  WHERE table_schema = 'app'
+    AND table_name = 'workspace_members'
+    AND column_name = 'permissions'
+`);
+
 if (auditTrigger.rowCount !== 1) {
   throw new Error("Audit append-only trigger is missing");
 }
 
-console.log(JSON.stringify({ metadata: metadata.rows[0], auditAppendOnlyTrigger: true }, null, 2));
+if (memberPermissionsColumn.rowCount !== 1) {
+  throw new Error("Workspace member permissions column is missing");
+}
+
+await pool.query(`
+  SELECT b.base_id
+  FROM app.bases b
+  JOIN app.workspace_members wm ON wm.workspace_id = b.workspace_id
+  WHERE b.deleted_at IS NULL
+    AND (
+      wm.permissions IS NULL
+      OR wm.permissions->>'workspace' IS NOT NULL
+      OR wm.permissions->'bases' ? b.base_id::text
+      OR EXISTS (
+        SELECT 1 FROM app.tables t
+        WHERE t.base_id = b.base_id AND wm.permissions->'tables' ? t.table_id::text
+      )
+    )
+  LIMIT 1
+`);
+
+console.log(JSON.stringify({
+  metadata: metadata.rows[0],
+  auditAppendOnlyTrigger: true,
+  memberPermissionsColumn: true
+}, null, 2));
 await pool.end();

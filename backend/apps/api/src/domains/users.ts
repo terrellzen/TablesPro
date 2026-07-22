@@ -5,6 +5,7 @@ import { pool } from "../db/pool.js";
 import { auth } from "../auth/auth.js";
 import { requireActor } from "./authz.js";
 import { HttpError, mapError, readBodyObject, readRequiredString, sendOk } from "./http.js";
+import { assertUserIsNotFinalAdmin } from "./member-permission-store.js";
 
 export type UserProfile = {
   user_id: string;
@@ -15,7 +16,7 @@ export type UserProfile = {
   disabled_at: string | null;
 };
 
-export function registerUserRoutes(app: FastifyInstance<any, any, any, any, any>): void {
+export function registerUserRoutes(app: FastifyInstance): void {
   app.get("/api/users", async (request, reply) => {
     try {
       await requireActor(request);
@@ -79,8 +80,8 @@ export function registerUserRoutes(app: FastifyInstance<any, any, any, any, any>
         can_manage_users: canManageUsers,
         disabled_at: null
       });
-    } catch (error: any) {
-      if (error?.name === "BASE_ERROR" || error?.message?.includes("already exists")) {
+    } catch (error) {
+      if (isDuplicateAccountError(error)) {
         return mapError(request, reply, new HttpError(409, "CONFLICT", "A user with this email already exists"));
       }
       return mapError(request, reply, error);
@@ -152,6 +153,7 @@ export function registerUserRoutes(app: FastifyInstance<any, any, any, any, any>
   });
 
   app.delete("/api/users/:userId", async (request, reply) => {
+    const client = await pool.connect();
     try {
       const actor = await requireActor(request);
       await requireCanManageUsers(actor.userId);
@@ -159,13 +161,19 @@ export function registerUserRoutes(app: FastifyInstance<any, any, any, any, any>
       if (targetUserId === actor.userId) {
         throw new HttpError(403, "FORBIDDEN", "Users cannot disable themselves");
       }
-      await pool.query("UPDATE app.user_profiles SET disabled_at = now(), updated_at = now() WHERE user_id = $1", [
+      await client.query("BEGIN");
+      await assertUserIsNotFinalAdmin(targetUserId, client);
+      await client.query("UPDATE app.user_profiles SET disabled_at = now(), updated_at = now() WHERE user_id = $1", [
         targetUserId
       ]);
-      await pool.query("DELETE FROM app.workspace_members WHERE user_id = $1", [targetUserId]);
+      await client.query("DELETE FROM app.workspace_members WHERE user_id = $1", [targetUserId]);
+      await client.query("COMMIT");
       return reply.status(204).send();
     } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
       return mapError(request, reply, error);
+    } finally {
+      client.release();
     }
   });
 
@@ -220,6 +228,13 @@ export function registerUserRoutes(app: FastifyInstance<any, any, any, any, any>
       return mapError(request, reply, error);
     }
   });
+}
+
+function isDuplicateAccountError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { name?: unknown; message?: unknown };
+  return candidate.name === "BASE_ERROR" ||
+    (typeof candidate.message === "string" && candidate.message.includes("already exists"));
 }
 
 export async function readUserProfile(userId: string): Promise<UserProfile | null> {
