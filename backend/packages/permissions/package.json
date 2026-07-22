@@ -9,19 +9,12 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./better-auth": {
-      "types": "./dist/better-auth-access.d.ts",
-      "import": "./dist/better-auth-access.js"
     }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
-  },
-  "dependencies": {
-    "better-auth": "^1.6.23"
   },
   "devDependencies": {
     "vitest": "^3.0.5"

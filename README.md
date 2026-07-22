@@ -12,7 +12,6 @@ This repo is split into two independent pnpm projects:
 - `backend/packages/contracts` — Shared API contracts
 - `backend/packages/permissions` — Authorization logic
 - `frontend/apps/web` — React/Vite web application
-- `frontend/packages/ui` — Shared UI component library
 
 ## Prerequisites
 

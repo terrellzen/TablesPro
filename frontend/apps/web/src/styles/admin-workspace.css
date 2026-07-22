@@ -1,11 +1,8 @@
-.member-list,
-.invite-list,
-.user-list {
+.member-list {
   display: grid;
 }
 
-.member-row,
-.invite-row {
+.member-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 96px 34px;
   align-items: center;
@@ -14,33 +11,21 @@
   border-bottom: 1px solid var(--color-border);
 }
 
-.invite-row {
-  grid-template-columns: minmax(0, 1fr) 34px;
-}
-
 .member-row strong,
-.member-row span,
-.invite-row strong,
-.invite-row span {
+.member-row span {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.member-row strong,
-.invite-row strong {
+.member-row strong {
   font-size: 13px;
 }
 
-.member-row span,
-.invite-row span {
+.member-row span {
   color: var(--color-text-muted);
   font-size: 12px;
-}
-
-.invite-row.muted {
-  opacity: 0.55;
 }
 
 .inline-heading {
@@ -81,32 +66,6 @@
 
 .icon-button.danger {
   color: var(--color-danger);
-}
-
-.audit-list {
-  height: 100%;
-  overflow: auto;
-}
-
-.audit-item {
-  display: grid;
-  gap: 2px;
-  padding: 10px;
-  border-bottom: 1px solid var(--color-border);
-  font-size: 12px;
-}
-
-.audit-item strong,
-.audit-item span,
-.audit-item time {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.audit-item span,
-.audit-item time {
-  color: var(--color-text-muted);
 }
 
 .empty-state {

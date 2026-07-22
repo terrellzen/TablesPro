@@ -6,8 +6,8 @@ TablesPro is a TypeScript pnpm monorepo with separate web, API, worker, and shar
 - `backend/apps/worker`: PostgreSQL-backed job processing for schema changes, imports, exports, retries, and dead letters.
 - `frontend/apps/web`: React/Vite application with a virtualized table grid.
 - `backend/packages/contracts`: shared API envelopes, filter ASTs, field types, and pagination contracts.
-- `backend/packages/database`: SQL-adjacent safety helpers, cursor signing, filter compilation, CSV safety, audit diffs, and migration tooling.
-- `backend/packages/permissions`: product RBAC and Better Auth organization access-control bridge.
+- `backend/packages/database`: SQL-adjacent safety helpers, cursor signing, filter compilation, CSV safety, and migration tooling.
+- `backend/packages/permissions`: product RBAC and scoped permission evaluation.
 - `backend/tests`: backend tests grouped by API, database, and permissions domains, outside production source trees.
 
 The API bootstrap in `server.ts` is limited to transport configuration, health checks, and route registration. Domain route modules are organized by resource; field routes are separate from table routes, admin routes are isolated from bootstrap, and record input parsing is separate from SQL query/cursor construction.

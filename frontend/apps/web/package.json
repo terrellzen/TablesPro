@@ -10,9 +10,6 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.0.0",
-    "@tanstack/react-router": "^1.0.0",
-    "@tanstack/react-table": "^8.0.0",
     "@tanstack/react-virtual": "^3.0.0",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",

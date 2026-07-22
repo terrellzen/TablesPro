@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { createAuditDiff } from "../../packages/database/src/audit-diff.js";
 import { decodeCursor, encodeCursor } from "../../packages/database/src/cursor.js";
 import { sanitizeCsvCell } from "../../packages/database/src/csv-safety.js";
 import { compileFilter } from "../../packages/database/src/filter-compiler.js";
@@ -64,16 +63,6 @@ describe("filter compiler", () => {
 describe("csv safety", () => {
   it("escapes spreadsheet formulas on export", () => {
     expect(sanitizeCsvCell("=IMPORTXML('https://example.test')")).toBe("'=IMPORTXML('https://example.test')");
-  });
-});
-
-describe("audit diff", () => {
-  it("returns only changed fields", () => {
-    expect(createAuditDiff({ name: "Old", count: 1 }, { name: "New", count: 1 })).toEqual({
-      before: { name: "Old" },
-      after: { name: "New" },
-      changedFields: ["name"]
-    });
   });
 });
 

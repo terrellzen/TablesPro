@@ -6,8 +6,7 @@
     "paths": {
       "@tablespro/contracts": ["../../packages/contracts/src/index.ts"],
       "@tablespro/database": ["../../packages/database/src/index.ts"],
-      "@tablespro/permissions": ["../../packages/permissions/src/index.ts"],
-      "@tablespro/permissions/better-auth": ["../../packages/permissions/src/better-auth-access.ts"]
+      "@tablespro/permissions": ["../../packages/permissions/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts"]

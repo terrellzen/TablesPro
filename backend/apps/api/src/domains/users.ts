@@ -183,7 +183,7 @@ export function registerUserRoutes(app: FastifyInstance): void {
       const currentPassword = readRequiredString(body, "currentPassword");
       const newPassword = readRequiredString(body, "newPassword");
 
-      const result = await auth.api.changePassword({
+      await auth.api.changePassword({
         body: { currentPassword, newPassword },
         headers: fromNodeHeaders(request.headers)
       });
