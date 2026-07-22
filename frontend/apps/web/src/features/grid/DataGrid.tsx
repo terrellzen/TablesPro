@@ -24,7 +24,7 @@ type DataGridProps = {
   onHideField: (fieldId: string) => void;
   onDeleteField: (fieldId: string) => void;
   dropdownOptions: DropdownOptionsByField;
-  onSetDropdownColor: (fieldId: string, value: string, color: string) => void;
+  onOpenDropdownColors: (fieldId: string) => void;
   onContextMenu: (x: number, y: number, items: ContextMenuItem[]) => void;
   onLoadMore?: () => void;
   hasMore?: boolean;
@@ -96,12 +96,11 @@ export function DataGrid(props: DataGridProps) {
                   const items: ContextMenuItem[] = buildFieldContextMenu({
                     field,
                     allFields: props.allFields,
-                    dropdownOptions: props.dropdownOptions[field.field_id],
                     onRename: () => props.onRenameField(field.field_id, field.name),
+                    onOpenColors: () => props.onOpenDropdownColors(field.field_id),
                     onMove: (direction) => props.onMoveField(field.field_id, direction),
                     onHide: () => props.onHideField(field.field_id),
-                    onDelete: () => props.onDeleteField(field.field_id),
-                    onSetDropdownColor: (value, color) => props.onSetDropdownColor(field.field_id, value, color)
+                    onDelete: () => props.onDeleteField(field.field_id)
                   });
                   props.onContextMenu(event.clientX, event.clientY, items);
                 }}

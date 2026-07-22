@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Field } from "../../apps/web/src/types/domain.js";
 import { buildDropdownColors, dropdownColor, generatedColor } from "../../apps/web/src/features/grid/dropdownColors.js";
+import { buildFieldContextMenu } from "../../apps/web/src/features/grid/fieldContextMenu.js";
 
 const field: Field = {
   field_id: "field-1",
@@ -27,5 +28,22 @@ describe("dropdown colors", () => {
     const values = Array.from({ length: 100 }, (_, index) => `Option ${index}`);
     const colors = buildDropdownColors(values, {});
     expect(new Set(Object.values(colors))).toHaveLength(values.length);
+  });
+
+  it("opens the color editor directly from a Dropdown column menu", () => {
+    let opened = false;
+    const items = buildFieldContextMenu({
+      field,
+      allFields: [field],
+      onRename: () => undefined,
+      onOpenColors: () => { opened = true; },
+      onMove: () => undefined,
+      onHide: () => undefined,
+      onDelete: () => undefined
+    });
+    const colors = items.find((item) => item.label === "Colors");
+    expect(colors?.children).toBeUndefined();
+    colors?.onClick?.();
+    expect(opened).toBe(true);
   });
 });

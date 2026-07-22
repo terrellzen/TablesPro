@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { Layers3, Plus, RefreshCcw, Save, Search, Table2 } from "lucide-react";
 import { Selector } from "../../components/Selector.js";
 import { DataGrid } from "../grid/DataGrid.js";
+import { DropdownColorDialog } from "../grid/DropdownColorDialog.js";
 import { useDropdownOptions } from "../grid/useDropdownOptions.js";
 import type { AppController } from "./controllerTypes.js";
 import { fieldValueForInput } from "../../lib/format.js";
 
 export function TableWorkspace({ controller }: { controller: AppController }) {
+  const [colorFieldId, setColorFieldId] = useState<string | null>(null);
   const {
     fields, records, views, activeViewId, setActiveViewId,
     filterFieldId, setFilterFieldId, filterValue, setFilterValue, sortFieldId,
@@ -17,6 +20,7 @@ export function TableWorkspace({ controller }: { controller: AppController }) {
     setContextMenu, loadMore, setDropdownColor
   } = controller;
   const dropdownOptions = useDropdownOptions(selectedTableId, fields, records);
+  const colorField = fields.find((field) => field.field_id === colorFieldId) ?? null;
 
   return (
     <>
@@ -138,7 +142,7 @@ export function TableWorkspace({ controller }: { controller: AppController }) {
               onHideField={hideField}
               onDeleteField={deleteField}
               dropdownOptions={dropdownOptions}
-              onSetDropdownColor={(fieldId, value, color) => void setDropdownColor(fieldId, value, color)}
+              onOpenDropdownColors={setColorFieldId}
               onContextMenu={(x, y, items) => setContextMenu({ x, y, items })}
               onLoadMore={loadMore}
               hasMore={hasMore}
@@ -149,6 +153,14 @@ export function TableWorkspace({ controller }: { controller: AppController }) {
           </div>
         )}
       </section>
+      {colorField && (
+        <DropdownColorDialog
+          field={colorField}
+          options={dropdownOptions[colorField.field_id]}
+          onSetColor={(value, color) => void setDropdownColor(colorField.field_id, value, color)}
+          onClose={() => setColorFieldId(null)}
+        />
+      )}
     </>
   );
 }
