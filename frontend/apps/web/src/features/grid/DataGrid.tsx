@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Table2, Trash2 } from "lucide-react";
+import { Copy, Table2, Trash2 } from "lucide-react";
 import type { Field, RecordRow } from "../../types/domain.js";
 import type { ContextMenuItem } from "../../types/ui.js";
 import { buildFieldContextMenu } from "./fieldContextMenu.js";
@@ -18,6 +18,7 @@ type DataGridProps = {
   onStartEdit: (record: RecordRow, field: Field) => void;
   onCancelEdit: () => void;
   onSaveCell: (record: RecordRow, field: Field) => Promise<void>;
+  onDuplicateRecord: (record: RecordRow) => void;
   onDeleteRecord: (record: RecordRow) => void;
   onRenameField: (fieldId: string, name: string) => void;
   onMoveField: (fieldId: string, direction: "left" | "right" | "start" | "end") => void;
@@ -35,7 +36,7 @@ type DataGridProps = {
 
 export function DataGrid(props: DataGridProps) {
   const parentRef = useRef<HTMLDivElement | null>(null);
-  const deleteColumnWidth = 40;
+  const actionColumnWidth = 76;
   const rowVirtualizer = useVirtualizer({
     count: props.records.length,
     getScrollElement: () => parentRef.current,
@@ -59,7 +60,7 @@ export function DataGrid(props: DataGridProps) {
 
   const virtualRows = rowVirtualizer.getVirtualItems();
   const virtualColumns = columnVirtualizer.getVirtualItems();
-  const totalWidth = columnVirtualizer.getTotalSize() + deleteColumnWidth;
+  const totalWidth = columnVirtualizer.getTotalSize() + actionColumnWidth;
   const totalHeight = rowVirtualizer.getTotalSize();
   const footerHeight = props.initialLoading ? 0 : 42;
   const bodyHeight = props.initialLoading && props.records.length === 0 ? 12 * 38 : totalHeight + footerHeight;
@@ -109,7 +110,7 @@ export function DataGrid(props: DataGridProps) {
               </div>
             );
           })}
-          <div className="grid-header-cell" style={{ left: totalWidth - deleteColumnWidth, width: deleteColumnWidth }} />
+          <div className="grid-header-cell" style={{ left: totalWidth - actionColumnWidth, width: actionColumnWidth }} />
         </div>
         <div className="grid-body" style={{ width: totalWidth, height: bodyHeight }}>
           {props.initialLoading && props.records.length === 0 && Array.from({ length: 12 }, (_, index) => (
@@ -157,7 +158,10 @@ export function DataGrid(props: DataGridProps) {
                     </div>
                   );
                 })}
-                <div className="grid-cell-wrap" style={{ left: totalWidth - deleteColumnWidth, width: deleteColumnWidth }}>
+                <div className="grid-cell-wrap record-actions" style={{ left: totalWidth - actionColumnWidth, width: actionColumnWidth }}>
+                  <button type="button" className="icon-button" onClick={() => props.onDuplicateRecord(record)} aria-label="Duplicate record" title="Duplicate record">
+                    <Copy size={14} />
+                  </button>
                   <button type="button" className="icon-button danger" onClick={() => props.onDeleteRecord(record)} aria-label="Delete record">
                     <Trash2 size={14} />
                   </button>

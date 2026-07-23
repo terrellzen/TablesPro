@@ -7,7 +7,6 @@ import type { ContextMenuItem } from "../../types/ui.js";
 export function WorkspaceSidebar(props: {
   currentUser: AuthUser;
   profile: UserProfile | null;
-  apiServerUrl: string;
   selectedWorkspace: Workspace | null;
   selectedWorkspaceId: string | null;
   workspaces: Workspace[];
@@ -20,7 +19,6 @@ export function WorkspaceSidebar(props: {
   onRenameWorkspace: (workspace: Workspace) => void;
   onManageMembers: (workspace: Workspace) => void;
   onContextMenu: (x: number, y: number, items: ContextMenuItem[]) => void;
-  onApiServerChange: (url: string) => Promise<void>;
   onProfileChange: (profile: UserProfile) => void;
   onLogout: () => Promise<void>;
   onChangePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
@@ -37,8 +35,6 @@ export function WorkspaceSidebar(props: {
       <AccountBlock
         user={props.currentUser}
         profile={props.profile}
-        apiServerUrl={props.apiServerUrl}
-        onApiServerChange={props.onApiServerChange}
         onProfileChange={props.onProfileChange}
         onLogout={props.onLogout}
         onChangePassword={props.onChangePassword}

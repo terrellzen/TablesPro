@@ -21,6 +21,7 @@ export function AuthScreen(props: {
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<Status>({ tone: "idle", text: "Use your TablesPro account" });
   const [submitting, setSubmitting] = useState(false);
+  const [checkingServer, setCheckingServer] = useState(false);
 
   useEffect(() => {
     setServerDraft(props.apiServerUrl);
@@ -35,8 +36,10 @@ export function AuthScreen(props: {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
-    setStatus({ tone: "idle", text: mode === "sign-in" ? "Signing in" : "Creating account" });
+    setStatus({ tone: "idle", text: "Checking API and database" });
     try {
+      await props.onApiServerChange(serverDraft);
+      setStatus({ tone: "idle", text: mode === "sign-in" ? "Signing in" : "Creating account" });
       const path = mode === "sign-in" ? "/api/auth/sign-in/email" : "/api/auth/sign-up/email";
       await mutate(path, {
         email: email.trim(),
@@ -58,11 +61,15 @@ export function AuthScreen(props: {
   }
 
   async function saveServer() {
+    setCheckingServer(true);
+    setStatus({ tone: "idle", text: "Checking API and database" });
     try {
       await props.onApiServerChange(serverDraft);
-      setStatus({ tone: "success", text: "Server updated" });
+      setStatus({ tone: "success", text: "API and database are online and ready" });
     } catch (error) {
       setStatus({ tone: "danger", text: errorMessage(error) });
+    } finally {
+      setCheckingServer(false);
     }
   }
 
@@ -103,9 +110,14 @@ export function AuthScreen(props: {
               onChange={(event) => setServerDraft(event.target.value)}
             />
           </label>
-          <button type="button" className="small-button" onClick={() => void saveServer()}>
+          <button
+            type="button"
+            className="small-button"
+            disabled={checkingServer || submitting}
+            onClick={() => void saveServer()}
+          >
             <Database size={15} />
-            Use
+            {checkingServer ? "Checking" : "Use"}
           </button>
         </div>
 

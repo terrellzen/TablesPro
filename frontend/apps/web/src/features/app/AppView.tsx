@@ -55,7 +55,6 @@ export function AppView({ controller }: { controller: AppController }) {
       <WorkspaceSidebar
         currentUser={currentUser}
         profile={profile}
-        apiServerUrl={apiServerUrl}
         selectedWorkspace={selectedWorkspace}
         selectedWorkspaceId={selectedWorkspaceId}
         workspaces={workspaces}
@@ -70,7 +69,6 @@ export function AppView({ controller }: { controller: AppController }) {
           void controller.openWorkspaceMembers(workspace.workspace_id);
         }}
         onContextMenu={(x, y, items) => setContextMenu({ x, y, items })}
-        onApiServerChange={handleApiServerChange}
         onProfileChange={setProfile}
         onLogout={logout}
         onChangePassword={changeMyPassword}
@@ -89,6 +87,7 @@ export function AppView({ controller }: { controller: AppController }) {
 
         {showAdmin ? (
           <AdminPanel
+            onClose={() => setShowAdmin(false)}
             currentUser={currentUser}
             profile={profile}
             users={controller.users}

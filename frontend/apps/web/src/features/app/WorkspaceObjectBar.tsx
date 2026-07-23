@@ -104,8 +104,8 @@ export function WorkspaceObjectBar({
             value=""
             options={[
               { value: "short_text", label: "Text" },
-              { value: "decimal", label: "Number" },
-              { value: "currency", label: "Currency" },
+              { value: "integer", label: "Number" },
+              { value: "currency", label: "Decimal" },
               { value: "date", label: "Date" },
               { value: "url", label: "URL" },
               { value: "email", label: "Email" },

@@ -2,13 +2,16 @@ import { useState } from "react";
 import { Layers3, Plus, RefreshCcw, Save, Search, Table2 } from "lucide-react";
 import { Selector } from "../../components/Selector.js";
 import { DataGrid } from "../grid/DataGrid.js";
+import { DuplicateRecordDialog } from "../grid/DuplicateRecordDialog.js";
 import { DropdownColorDialog } from "../grid/DropdownColorDialog.js";
 import { useDropdownOptions } from "../grid/useDropdownOptions.js";
 import type { AppController } from "./controllerTypes.js";
 import { fieldValueForInput } from "../../lib/format.js";
+import type { RecordRow } from "../../types/domain.js";
 
 export function TableWorkspace({ controller }: { controller: AppController }) {
   const [colorFieldId, setColorFieldId] = useState<string | null>(null);
+  const [recordToDuplicate, setRecordToDuplicate] = useState<RecordRow | null>(null);
   const {
     fields, records, views, activeViewId, setActiveViewId,
     filterFieldId, setFilterFieldId, filterValue, setFilterValue, sortFieldId,
@@ -16,7 +19,7 @@ export function TableWorkspace({ controller }: { controller: AppController }) {
     selectedTableId, visibleFields, searchedRecords, editingCell, setEditingCell,
     draftValue, setDraftValue, hasMore, loadingRows, loadingMore, loadMoreError,
     createFieldGroup, createSavedView, showAllRecords, deleteView, addField,
-    saveCell, deleteRecord, openRenameModal, moveField, hideField, deleteField,
+    saveCell, duplicateRecord, deleteRecord, openRenameModal, moveField, hideField, deleteField,
     setContextMenu, loadMore, setDropdownColor
   } = controller;
   const dropdownOptions = useDropdownOptions(selectedTableId, fields, records);
@@ -134,6 +137,7 @@ export function TableWorkspace({ controller }: { controller: AppController }) {
               }}
               onCancelEdit={() => setEditingCell(null)}
               onSaveCell={saveCell}
+              onDuplicateRecord={setRecordToDuplicate}
               onDeleteRecord={deleteRecord}
               onRenameField={(fieldId, name) => {
                 if (selectedTableId) openRenameModal("field", fieldId, name, selectedTableId);
@@ -159,6 +163,16 @@ export function TableWorkspace({ controller }: { controller: AppController }) {
           options={dropdownOptions[colorField.field_id]}
           onSetColor={(value, color) => void setDropdownColor(colorField.field_id, value, color)}
           onClose={() => setColorFieldId(null)}
+        />
+      )}
+      {recordToDuplicate && (
+        <DuplicateRecordDialog
+          key={recordToDuplicate.record_id}
+          record={recordToDuplicate}
+          fields={fields}
+          dropdownOptions={dropdownOptions}
+          onSave={duplicateRecord}
+          onClose={() => setRecordToDuplicate(null)}
         />
       )}
     </>

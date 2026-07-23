@@ -1,5 +1,7 @@
 import type { KeyboardEvent, MouseEvent } from "react";
-import { fieldValueForInput } from "../../lib/format.js";
+import {
+  fieldValueForInput, numericInputPattern, numericInputTitle
+} from "../../lib/format.js";
 import type { Field } from "../../types/domain.js";
 import { dropdownColor } from "./dropdownColors.js";
 
@@ -16,7 +18,7 @@ export function GridCellEditor(props: EditorProps) {
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement | HTMLSelectElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
-      event.currentTarget.blur();
+      if (event.currentTarget.reportValidity()) event.currentTarget.blur();
     }
     if (event.key === "Escape") props.onCancel();
   }
@@ -49,10 +51,16 @@ export function GridCellEditor(props: EditorProps) {
         autoFocus
         list={listId}
         type={inputType}
-        step={inputType === "number" ? (props.field.field_type === "integer" ? "1" : "any") : undefined}
+        inputMode={editorInputMode(props.field.field_type)}
+        pattern={numericInputPattern(props.field.field_type)}
+        title={numericInputTitle(props.field.field_type)}
+        placeholder={props.field.field_type === "url" ? "https://example.com" : undefined}
         value={props.value}
         onChange={(event) => props.onChange(event.target.value)}
-        onBlur={props.onSave}
+        onBlur={(event) => {
+          if (event.currentTarget.checkValidity()) props.onSave();
+          else event.currentTarget.reportValidity();
+        }}
         onKeyDown={handleKeyDown}
       />
       {listId && (
@@ -94,12 +102,17 @@ export function GridCellValue({ field, value, color }: {
   return text;
 }
 
-function editorInputType(fieldType: Field["field_type"]): "text" | "number" | "date" | "url" | "email" {
-  if (["integer", "decimal", "currency", "percentage"].includes(fieldType)) return "number";
+function editorInputType(fieldType: Field["field_type"]): "text" | "date" | "email" {
   if (fieldType === "date") return "date";
-  if (fieldType === "url") return "url";
   if (fieldType === "email") return "email";
   return "text";
+}
+
+function editorInputMode(fieldType: Field["field_type"]): "numeric" | "decimal" | "url" | undefined {
+  if (fieldType === "integer") return "numeric";
+  if (["decimal", "currency", "percentage"].includes(fieldType)) return "decimal";
+  if (fieldType === "url") return "url";
+  return undefined;
 }
 
 function stopDoubleClick(event: MouseEvent<HTMLAnchorElement>) {

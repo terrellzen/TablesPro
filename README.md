@@ -2,191 +2,248 @@
 
 TablesPro is a self-hosted, open-source relational table application for collaborative spreadsheet-style data management.
 
-## Project Structure
+The primary backend is now Laravel. The original Node.js backend remains in the repository as a fallback.
 
-This repo is split into two independent pnpm projects:
+## Project structure
 
-- `backend/apps/api` — Fastify REST API with Better Auth
-- `backend/apps/worker` — Background job processor
-- `backend/packages/database` — Migrations, seed data, and database helpers
-- `backend/packages/contracts` — Shared API contracts
-- `backend/packages/permissions` — Authorization logic
-- `frontend/apps/web` — React/Vite web application
+- `backend-laravel/`: Laravel API, authentication, authorization, database worker, and tests
+- `backend/`: Original Fastify API and Node.js worker kept as a fallback
+- `frontend/`: React and Vite web application, frontend dependencies, and tests
+- `frontend/apps/web/`: Frontend application source
+- `docs/`: Architecture, security, permissions, deployment, and operations documentation
+- `scripts/`: Repository maintenance and performance scripts
 
-## Prerequisites
+## Primary stack
 
-- Node.js ≥ 20
-- pnpm (via Corepack)
-- PostgreSQL 14+
+- PHP 8.2 or newer
+- Laravel 12
+- Laravel Sanctum with encrypted server-side sessions
+- PostgreSQL 14 or newer
+- React and Vite
+- Node.js 20 or newer for the frontend
+- pnpm through Corepack
 
-## Initial Setup
+## Initial setup
 
-```sh
-corepack pnpm -C backend install
-corepack pnpm -C frontend install
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
-```
-
-Edit each `.env` as needed — the defaults work with a local PostgreSQL instance on the standard port. Backend and frontend have separate `.env` files since they may be deployed independently.
-
-### Environment Variables
-
-**Backend** (`backend/.env`):
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `DATABASE_URL` | `postgres://tablespro:tablespro@localhost:5432/tablespro?options=-c%20search_path%3Dauth,app,public` | PostgreSQL connection string |
-| `API_PORT` | `4000` | Port the API listens on |
-| `BETTER_AUTH_URL` | `http://localhost:4000` | Public URL for auth callbacks |
-| `BETTER_AUTH_SECRET` | *(required)* | Random string ≥ 32 characters |
-| `WEB_ORIGIN` | `http://localhost:3000,...` | Comma-separated allowed CORS origins |
-| `AUTH_SIGNUP_ENABLED` | `true` | Allow new user registration |
-
-**Frontend** (`frontend/.env`):
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `VITE_API_URL` | `http://localhost:4000` | Backend API URL (falls back to current host:4000) |
-
-## Database Setup
-
-Create the database and run migrations:
+Create a local PostgreSQL login and database. The following development
+credentials match `backend-laravel/.env.example`:
 
 ```sh
-createdb tablespro
-npm run migrate
+createuser --login --pwprompt tablespro
+createdb --owner=tablespro tablespro
 ```
 
-Seed dev data and verify the connection:
+When `createuser` prompts for the new role's password, enter `tablespro`. Run
+these commands as a PostgreSQL administrator; on Linux installations this may
+require prefixing them with `sudo -u postgres`.
+
+Install and configure the Laravel backend:
 
 ```sh
-npm run dev:seed
-npm run integration:check
+cd backend-laravel
+composer install
+cp .env.example .env
+php artisan key:generate
 ```
 
-To start/stop a local PostgreSQL instance managed by the project:
+Edit `backend-laravel/.env` and set the PostgreSQL connection values. The default frontend expects the API at `http://localhost:4000`.
+
+Apply the database schema:
 
 ```sh
-npm run db:start
-npm run db:stop
+php artisan migrate
+php artisan migrate:status
 ```
 
-### PostgreSQL User vs Application User
-
-TablesPro has two layers of users. They are independent and serve different purposes.
-
-**PostgreSQL user** is the database credential defined in `DATABASE_URL`. It controls who can connect to PostgreSQL and what tables they can read/write. This user has no concept of handles, display names, or app permissions — it is purely a database access role. The default setup uses a single shared credential (`dev` / `Password1234`) for all local development.
-
-**Application users** are the people who sign in to TablesPro. They are stored across two tables:
-
-- `auth.user` + `auth.account` — Managed by Better Auth. Stores email, password hash, and session tokens.
-- `app.user_profiles` — Stores the handle, display name, and permission flags (`can_create_workspaces`, `can_manage_users`).
-
-When someone signs up, both sets of rows are created. When `AUTH_SIGNUP_ENABLED=false`, signup is blocked at the HTTP level but the seed script can still insert directly into both tables.
-
-### Seeding the First Admin
-
-On a fresh database with no users, you need to create the first admin account. This user gets full permissions (`can_create_workspaces` and `can_manage_users`) and a default workspace.
+Install and configure the frontend:
 
 ```sh
-npm run seed-admin
+cd ../frontend
+corepack pnpm install
+cp .env.example .env
 ```
 
-This runs `backend/apps/api/src/seed-admin.ts`, which uses the same `auth.api.signUpEmail()` call that the signup page uses. This ensures password hashing is always handled by Better Auth, and the same code path is used whether you run the script or sign up through the UI.
+Set `VITE_API_URL=http://localhost:4000` in `frontend/.env` if it is not already configured.
 
-The script:
+## Laravel environment
 
-1. Checks if any users already exist — if so, exits early
-2. Creates the Better Auth account via `auth.api.signUpEmail()`
-3. Creates the `app.user_profiles` row with admin permissions
-4. Creates a "My Workspace" and adds the user as workspace admin
+Important values in `backend-laravel/.env` include:
 
-If `AUTH_SIGNUP_ENABLED=false`, the signup page is blocked but this script still works because it calls the Better Auth API directly (bypassing the HTTP-level signup gate).
+- `APP_URL`: Public URL of the Laravel API
+- `WEB_ORIGIN`: Allowed frontend origin, normally `http://localhost:3000`
+- `AUTH_SIGNUP_ENABLED`: Controls public account registration
+- `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD`: PostgreSQL connection settings
+- `SESSION_DRIVER`: Use `database` outside tests
+- `SESSION_LIFETIME`: Session lifetime in minutes
+- `SESSION_SECURE_COOKIE`: Set to `true` when using HTTPS
+- `SANCTUM_STATEFUL_DOMAINS`: Frontend hosts allowed to use session authentication
+- `EXPORT_DIRECTORY`: Optional directory for generated CSV exports
+- `WORKER_ID`: Optional name for the background worker
 
-Default credentials (override with environment variables):
+The PostgreSQL schemas are organized as follows:
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `ADMIN_EMAIL` | `admin@example.com` | Login email |
-| `ADMIN_PASSWORD` | `admin1234` | Login password |
-| `ADMIN_HANDLE` | `admin` | Username handle |
-| `ADMIN_DISPLAY_NAME` | `Admin` | Display name |
+- `auth`: User and email account data
+- `app`: Workspaces, metadata, permissions, audit events, and jobs
+- `app_data`: Physical record tables created for each TablesPro table
+- `public`: Laravel migrations and session storage
 
-Example with custom credentials:
+The SQL files in `backend-laravel/database/schema/` are exact copies of the original backend schema migrations.
+
+## Running in development
+
+Start the Laravel API from `backend-laravel/`:
 
 ```sh
-ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=changeme ADMIN_HANDLE=jdoe ADMIN_DISPLAY_NAME="Jane Doe" npm run seed-admin
+php artisan serve --host=0.0.0.0 --port=4000
 ```
 
-After the first admin is created, they can sign in and use the admin panel to create additional users.
-
-## Running for Development
-
-### API Server (backend/apps/api)
-Fastify HTTP server on port 4000. Handles all CRUD operations and auth. Routes include:
-- Workspaces, bases, tables — the resource hierarchy
-- Fields and records — schema and data for each table
-- Views — saved filter/sort configurations
-- Field groups — column grouping
-- Memberships — RBAC (owner/admin/editor/commenter/viewer)
-- Import/export — queues CSV jobs for the worker
-- Audit log — tracks all mutations
-- /health and /ready — liveness/readiness probes
-- /api/auth/* — Better Auth sign-in/sign-up/sign-out
-
-### Frontend (frontend/apps/web)
-React SPA served by Vite on port 3000. The entire UI is in main.tsx — a single-file app with a virtualized spreadsheet grid, sidebar workspace nav, and an admin panel for RBAC. It talks to the API at localhost:4000 (configurable in the UI).
-
-### Background Worker (backend/apps/worker)
-Long-polling job processor. Polls the app.background_jobs table, claims jobs with FOR UPDATE SKIP LOCKED, and runs them. Currently handles:
-- csv_export — streams table data to a CSV file at .local/exports/, updating progress in app.export_jobs
-- csv_import — stubbed, not implemented yet
-Jobs are retried with exponential backoff and dead-lettered after max attempts.
-
-Start each service in a separate terminal:
+Start the frontend from `frontend/`:
 
 ```sh
-# API server (Fastify) — http://localhost:4000
-npm run backend:dev
-
-# Frontend (Vite) — http://localhost:3000
-npm run frontend:dev
-
-# Background worker
-corepack pnpm --filter @tablespro/worker dev
+corepack pnpm dev
 ```
 
-The API mounts Better Auth at `/api/auth/*` and exposes a `/health` endpoint.
-
-### Running against a different database
+Start the Laravel database worker from `backend-laravel/`:
 
 ```sh
-DATABASE_URL=postgres://user:password@host:5432/tablespro_alt?options=-c%20search_path%3Dauth,app,public
-API_PORT=4001
-BETTER_AUTH_URL=http://localhost:4001
-WEB_ORIGIN=http://localhost:3002
-npm run backend:dev
+php artisan tablespro:work
 ```
 
-Then point the frontend to `http://localhost:4001`.
+The services are available at:
 
-## Testing & Checks
+- Frontend: `http://localhost:3000`
+- API: `http://localhost:4000`
+- Health check: `http://localhost:4000/health`
+- Readiness check: `http://localhost:4000/ready`
+
+The API requires PostgreSQL even before sign-in because Laravel sessions are
+stored in the database. If `/api/config` or `/api/me` returns HTTP 500, verify
+that PostgreSQL is running, that the `DB_*` values in
+`backend-laravel/.env` are correct, and that `http://localhost:4000/ready`
+returns HTTP 200.
+
+## First administrator
+
+On a fresh database, enable signup and create the first account through the web interface. When that account saves its profile, Laravel creates the first `app.user_profiles` row with workspace creation and user management permissions.
+
+The first administrator can then create a workspace and manage additional users from the admin panel. Disable public registration afterward by setting:
+
+```env
+AUTH_SIGNUP_ENABLED=false
+```
+
+## Authentication and security
+
+Laravel Sanctum provides stateful session authentication. Sessions are encrypted, stored in PostgreSQL, and sent through HTTP-only cookies.
+
+For production:
+
+- Serve both applications over HTTPS
+- Set `SESSION_SECURE_COOKIE=true`
+- Set `WEB_ORIGIN` to the exact frontend URL
+- Set `SANCTUM_STATEFUL_DOMAINS` to the frontend host
+- Use a strong generated `APP_KEY`
+- Keep `.env` files outside version control
+- Restrict PostgreSQL access to the Laravel application and trusted operators
+
+The API also applies request IDs, CORS restrictions, trusted-origin checks, content security headers, optimistic record concurrency, hierarchical permissions, and append-only audit events.
+
+## Background jobs
+
+The Laravel worker reads jobs from `app.background_jobs` with PostgreSQL row locking.
+
+Current behavior:
+
+- CSV exports stream records in batches and update progress in `app.export_jobs`
+- CSV cells are protected against spreadsheet formula injection
+- Failed jobs use exponential retry delays
+- Exhausted jobs are marked as dead lettered
+- CSV import remains a placeholder, matching the original Node.js worker
+
+Generated exports are written to `storage/app/exports` unless `EXPORT_DIRECTORY` is configured.
+
+## Testing and style checks
+
+Laravel tests require an empty PostgreSQL test database configured through the backend environment:
 
 ```sh
-npm run typecheck        # type-check all packages
-npm test                 # run unit tests (vitest)
-npm run license:check    # verify dependency licenses
+cd backend-laravel
+composer test
+composer lint
 ```
 
-## Benchmarks
+Frontend checks:
 
 ```sh
-npm run perf:seed
-npm run perf:api
-npm run perf:queries
-npm run perf:grid
-npm run perf:report
+cd frontend
+corepack pnpm test
+corepack pnpm typecheck
 ```
 
-See `docs/implementation-plan.md` for the build sequence.
+Repository license check:
+
+```sh
+node scripts/check-licenses.mjs
+```
+
+## Node.js fallback backend
+
+The original backend in `backend/` has not been removed or modified. It remains available if a deployment needs to fall back while the Laravel backend is being evaluated.
+
+Install it with:
+
+```sh
+cd backend
+corepack pnpm install
+cp .env.example .env
+```
+
+Run its migrations and start the API:
+
+```sh
+cd backend
+corepack pnpm migrate
+corepack pnpm dev
+```
+
+Start its worker in another terminal:
+
+```sh
+cd backend
+corepack pnpm worker:dev
+```
+
+All Node.js fallback commands are run through `backend/package.json`. For
+example, enter `backend/` and run `corepack pnpm test`. These commands do not
+manage the Laravel backend.
+
+There is intentionally no repository-root `package.json`: frontend Node.js
+dependencies live in `frontend/package.json`, and fallback backend Node.js
+dependencies live in `backend/package.json`.
+
+## API compatibility
+
+The Laravel backend preserves the existing frontend API paths and response shapes wherever practical, including:
+
+- Email and password signup, sign-in, and sign-out routes
+- Workspaces, bases, tables, fields, field groups, and saved views
+- Typed record creation, filtering, sorting, pagination, updates, and deletion
+- Optimistic concurrency through `rowVersion`
+- Dropdown options and colors
+- Workspace members and hierarchical permissions
+- User administration and password management
+- Audit events and database administration views
+- Idempotent import and export job creation
+- Deep duplication of workspaces, bases, and tables
+
+See `backend-laravel/ANALYSIS.md` for the backend comparison and `backend-laravel/README.md` for Laravel-specific implementation notes.
+
+## Additional documentation
+
+- `docs/architecture.md`
+- `docs/auth-and-rbac.md`
+- `docs/data-model.md`
+- `docs/deployment.md`
+- `docs/operations.md`
+- `docs/security-threat-model.md`
+- `docs/backup-restore.md`

@@ -30,19 +30,44 @@ export function useRecordActions(options: RecordActionsOptions) {
     await loadAuditEvents(selectedWorkspaceId);
   }
 
+  async function duplicateRecord(values: Record<string, unknown>): Promise<string | null> {
+    if (!selectedTableId || !selectedWorkspaceId) return "Select a table before duplicating a record";
+    try {
+      await mutate(`/api/tables/${selectedTableId}/records`, { values });
+      await reloadRecords(selectedTableId);
+      await loadAuditEvents(selectedWorkspaceId);
+      setStatus({ tone: "success", text: "Record duplicated" });
+      return null;
+    } catch (error) {
+      const message = errorMessage(error);
+      setStatus({ tone: "danger", text: message });
+      return message;
+    }
+  }
+
   async function saveCell(record: RecordRow, field: Field) {
     if (!selectedTableId || !selectedWorkspaceId) return;
-    setEditingCell(null);
     const storedValue = record[field.physical_column_name];
-    if (!fieldValueChanged(draftValue, storedValue, field.field_type)) return;
+    let nextValue: unknown;
+    try {
+      if (!fieldValueChanged(draftValue, storedValue, field.field_type)) {
+        setEditingCell(null);
+        return;
+      }
+      nextValue = coerceFieldValue(draftValue, field.field_type);
+    } catch (error) {
+      setStatus({ tone: "danger", text: errorMessage(error) });
+      return;
+    }
 
+    setEditingCell(null);
     setRecords((current) => current.map((row) =>
-      row.record_id === record.record_id ? { ...row, [field.physical_column_name]: draftValue } : row
+      row.record_id === record.record_id ? { ...row, [field.physical_column_name]: nextValue } : row
     ));
     try {
       const response = await mutate<{ data: RecordRow }>(`/api/tables/${selectedTableId}/records/${record.record_id}`, {
         rowVersion: Number(record.row_version),
-        values: { [field.field_id]: coerceFieldValue(draftValue, field.field_type) }
+        values: { [field.field_id]: nextValue }
       }, "PATCH");
       setRecords((current) => current.map((row) => row.record_id === record.record_id ? response.data : row));
       await loadAuditEvents(selectedWorkspaceId);
@@ -65,5 +90,5 @@ export function useRecordActions(options: RecordActionsOptions) {
     }
   }
 
-  return { addRecord, saveCell, deleteRecord };
+  return { addRecord, duplicateRecord, saveCell, deleteRecord };
 }

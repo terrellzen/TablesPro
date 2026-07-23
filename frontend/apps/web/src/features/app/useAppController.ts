@@ -169,7 +169,7 @@ export function useAppController() {
     loadAdminData, loadAuditEvents, setStatus
   });
   const sessionActions = useSessionActions({
-    loadCurrentUser, loadWorkspaces, setApiServerUrl, setCurrentUser, setAuthChecked,
+    loadCurrentUser, loadWorkspaces, setApiServerUrl, setCurrentUser,
     setWorkspaces, setBases, setTables, setFields, setRecords, setViews,
     setAuditEvents, setMembers, setUsers, setSelectedWorkspaceId, setSelectedBaseId,
     setSelectedTableId, setStatus
@@ -231,6 +231,7 @@ export function useAppController() {
     createTable: tableActions.createTable,
     addField: fieldActions.addField,
     addRecord: recordActions.addRecord,
+    duplicateRecord: recordActions.duplicateRecord,
     duplicateWorkspace: workspaceActions.duplicateWorkspace,
     duplicateBase: baseActions.duplicateBase,
     duplicateTable: tableActions.duplicateTable,

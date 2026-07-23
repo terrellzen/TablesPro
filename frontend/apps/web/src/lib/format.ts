@@ -2,11 +2,25 @@ import type { FieldType } from "../types/domain.js";
 
 export function coerceFieldValue(value: string, fieldType: FieldType): unknown {
   if (value === "") return null;
-  if (fieldType === "integer") return Number.parseInt(value, 10);
-  if (fieldType === "decimal" || fieldType === "currency" || fieldType === "percentage") return Number(value);
+  if (fieldType === "integer") {
+    const trimmed = value.trim();
+    if (!/^-?\d+$/.test(trimmed)) throw new Error("Enter a valid whole number without a decimal point");
+    const number = Number(trimmed);
+    if (!Number.isSafeInteger(number)) throw new Error("Enter a valid whole number");
+    return number;
+  }
+  if (fieldType === "decimal" || fieldType === "currency" || fieldType === "percentage") {
+    const number = Number(value.trim());
+    if (!Number.isFinite(number)) throw new Error("Enter a valid number using a decimal point");
+    return number;
+  }
   if (fieldType === "boolean") return value === "true" || value === "1" || value.toLowerCase() === "yes";
   if (fieldType === "single_select") return value.trim() || null;
-  if (fieldType === "url" || fieldType === "email") return value.trim() || null;
+  if (fieldType === "multiple_select") {
+    return [...new Set(value.split(",").map((entry) => entry.trim()).filter(Boolean))];
+  }
+  if (fieldType === "url") return normalizeHttpUrl(value);
+  if (fieldType === "email") return value.trim() || null;
   return value;
 }
 
@@ -29,4 +43,34 @@ export function fieldValueChanged(draftValue: string, storedValue: unknown, fiel
 
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong";
+}
+
+export function numericInputPattern(fieldType: FieldType): string | undefined {
+  if (fieldType === "integer") return "-?\\d+";
+  if (["decimal", "currency", "percentage"].includes(fieldType)) {
+    return "-?(?:\\d+(?:\\.\\d*)?|\\.\\d+)";
+  }
+  return undefined;
+}
+
+export function numericInputTitle(fieldType: FieldType): string | undefined {
+  if (fieldType === "integer") return "Enter a whole number without a decimal point, for example 42.";
+  if (["decimal", "currency", "percentage"].includes(fieldType)) {
+    return "Enter a valid number using a decimal point, for example 19.99.";
+  }
+  return undefined;
+}
+
+function normalizeHttpUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const candidate = /^[a-z][a-z\d+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  try {
+    const url = new URL(candidate);
+    if (!["http:", "https:"].includes(url.protocol) || !url.hostname) throw new Error();
+    return candidate;
+  } catch {
+    throw new Error("Enter a valid HTTP or HTTPS URL");
+  }
 }

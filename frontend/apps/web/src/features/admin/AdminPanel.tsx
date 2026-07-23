@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Database, History, ShieldCheck, Users } from "lucide-react";
+import { Database, History, ShieldCheck, Users, X } from "lucide-react";
 import type {
   AdminWorkspace, AuditEvent, AuthUser, CreateUserInput, UserProfile, Workspace
 } from "../../types/domain.js";
@@ -8,6 +8,7 @@ import { AdminDatabaseTab } from "./AdminDatabaseTab.js";
 import { AdminUsersTab } from "./AdminUsersTab.js";
 
 export type AdminPanelProps = {
+  onClose: () => void;
   currentUser: AuthUser;
   profile: UserProfile | null;
   users: UserProfile[];
@@ -42,6 +43,15 @@ export function AdminPanel(props: AdminPanelProps) {
       <div className="admin-page-header">
         <ShieldCheck size={20} />
         <h2>Administration</h2>
+        <button
+          type="button"
+          className="icon-button admin-close-button"
+          onClick={props.onClose}
+          aria-label="Close administration"
+          title="Close administration"
+        >
+          <X size={18} />
+        </button>
       </div>
       <div className="admin-tabs" role="tablist">
         <AdminTabButton tab="users" activeTab={tab} onSelect={setTab} icon={<Users size={15} />}>

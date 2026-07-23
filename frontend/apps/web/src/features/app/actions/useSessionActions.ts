@@ -1,4 +1,6 @@
-import { mutate, request, setConfiguredApiBaseUrl } from "../../../lib/api.js";
+import {
+  mutate, request, setConfiguredApiBaseUrl, validateApiBaseUrl
+} from "../../../lib/api.js";
 import { errorMessage } from "../../../lib/format.js";
 import type {
   AppTable, AuditEvent, AuthUser, Base, Field, RecordRow, SavedView, UserProfile,
@@ -11,7 +13,6 @@ type SessionActionsOptions = {
   loadWorkspaces: () => Promise<void>;
   setApiServerUrl: StateSetter<string>;
   setCurrentUser: StateSetter<AuthUser | null>;
-  setAuthChecked: StateSetter<boolean>;
   setWorkspaces: StateSetter<Workspace[]>;
   setBases: StateSetter<Base[]>;
   setTables: StateSetter<AppTable[]>;
@@ -30,7 +31,7 @@ type SessionActionsOptions = {
 export function useSessionActions(options: SessionActionsOptions) {
   const {
     loadCurrentUser, loadWorkspaces, setApiServerUrl, setCurrentUser,
-    setAuthChecked, setWorkspaces, setBases, setTables, setFields, setRecords,
+    setWorkspaces, setBases, setTables, setFields, setRecords,
     setViews, setAuditEvents, setMembers, setUsers, setSelectedWorkspaceId,
     setSelectedBaseId, setSelectedTableId, setStatus
   } = options;
@@ -57,11 +58,11 @@ export function useSessionActions(options: SessionActionsOptions) {
   }
 
   async function handleApiServerChange(nextUrl: string) {
-    const normalized = setConfiguredApiBaseUrl(nextUrl);
+    const normalized = await validateApiBaseUrl(nextUrl);
+    setConfiguredApiBaseUrl(normalized);
     setApiServerUrl(normalized);
     setCurrentUser(null);
     clearSessionData();
-    setAuthChecked(false);
     setStatus({ tone: "idle", text: `Server set to ${normalized}` });
   }
 

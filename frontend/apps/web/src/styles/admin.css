@@ -40,6 +40,11 @@
   margin: 0;
 }
 
+.admin-close-button {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
 .admin-tabs {
   display: flex;
   gap: 0;

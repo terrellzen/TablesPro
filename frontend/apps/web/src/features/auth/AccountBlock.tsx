@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Database, LogOut, UserRound } from "lucide-react";
+import { LogOut, UserRound } from "lucide-react";
 import { mutate } from "../../lib/api.js";
 import { errorMessage } from "../../lib/format.js";
 import type { AuthUser, UserProfile } from "../../types/domain.js";
@@ -7,15 +7,12 @@ import type { AuthUser, UserProfile } from "../../types/domain.js";
 export function AccountBlock(props: {
   user: AuthUser;
   profile: UserProfile | null;
-  apiServerUrl: string;
-  onApiServerChange: (url: string) => Promise<void>;
   onProfileChange: (profile: UserProfile) => void;
   onLogout: () => Promise<void>;
   onChangePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
 }) {
-  const [serverDraft, setServerDraft] = useState(props.apiServerUrl);
   const [handleDraft, setHandleDraft] = useState(props.profile?.handle ?? "");
-  const [serverStatus, setServerStatus] = useState("");
+  const [accountStatus, setAccountStatus] = useState("");
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -24,21 +21,8 @@ export function AccountBlock(props: {
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
 
   useEffect(() => {
-    setServerDraft(props.apiServerUrl);
-  }, [props.apiServerUrl]);
-
-  useEffect(() => {
     setHandleDraft(props.profile?.handle ?? "");
   }, [props.profile?.handle]);
-
-  async function saveServer() {
-    try {
-      await props.onApiServerChange(serverDraft);
-      setServerStatus("Server updated");
-    } catch (error) {
-      setServerStatus(errorMessage(error));
-    }
-  }
 
   async function saveProfile() {
     try {
@@ -47,9 +31,9 @@ export function AccountBlock(props: {
         displayName: props.user.name || props.user.email || handleDraft
       }, "PUT");
       props.onProfileChange(response.data);
-      setServerStatus("User id updated");
+      setAccountStatus("User id updated");
     } catch (error) {
-      setServerStatus(errorMessage(error));
+      setAccountStatus(errorMessage(error));
     }
   }
 
@@ -126,15 +110,7 @@ export function AccountBlock(props: {
         </form>
       )}
 
-      <label className="stacked-field server-field">
-        <span>API server</span>
-        <input value={serverDraft} spellCheck={false} onChange={(event) => setServerDraft(event.target.value)} />
-      </label>
-      <button type="button" className="small-button" onClick={() => void saveServer()}>
-        <Database size={15} />
-        Switch
-      </button>
-      {serverStatus ? <span className="server-status">{serverStatus}</span> : null}
+      {accountStatus ? <span className="server-status">{accountStatus}</span> : null}
     </div>
   );
 }

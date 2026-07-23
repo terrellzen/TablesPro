@@ -3,6 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "cd apps/web && vite --host 0.0.0.0",
     "build": "tsc -p apps/web/tsconfig.json --noEmit && cd apps/web && vite build",

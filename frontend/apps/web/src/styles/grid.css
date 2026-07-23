@@ -129,6 +129,19 @@
   background: var(--color-secondary);
 }
 
+.record-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 3px;
+}
+
+.record-actions .icon-button {
+  width: 32px;
+  height: 32px;
+}
+
 .cell-input {
   outline: 2px solid var(--color-focus);
   outline-offset: -2px;

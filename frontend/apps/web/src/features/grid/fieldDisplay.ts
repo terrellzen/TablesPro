@@ -3,8 +3,9 @@ import type { FieldType } from "../../types/domain.js";
 const fieldTypeLabels: Partial<Record<FieldType, string>> = {
   short_text: "Text",
   long_text: "Long text",
-  decimal: "Number",
-  currency: "Currency",
+  integer: "Number",
+  decimal: "Decimal",
+  currency: "Decimal",
   boolean: "Boolean",
   date: "Date",
   timestamp_tz: "Date and time",
