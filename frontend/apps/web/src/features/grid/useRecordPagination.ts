@@ -1,14 +1,15 @@
 import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { api } from "../../lib/api.js";
 import { errorMessage } from "../../lib/format.js";
-import type { PageEnvelope, RecordRow } from "../../types/domain.js";
+import type {
+  FilterRule, PageEnvelope, RecordRow, RecordSort
+} from "../../types/domain.js";
+import { toFilterExpression } from "./viewQuery.js";
 
 type RecordQuery = {
   selectedTableId: string | null;
-  filterFieldId: string;
-  filterValue: string;
-  sortFieldId: string;
-  sortDirection: "asc" | "desc";
+  filters: FilterRule[];
+  sorts: RecordSort[];
   onError: (message: string) => void;
 };
 
@@ -47,19 +48,11 @@ export function useRecordPagination(query: RecordQuery): RecordPagination {
   const fetchPage = useCallback(async (tableId: string, cursor?: string, signal?: AbortSignal) => {
     const params = new URLSearchParams({ limit: "100" });
     if (cursor) params.set("cursor", cursor);
-    if (query.filterFieldId && query.filterValue) {
-      params.set("filter", JSON.stringify({
-        kind: "rule",
-        fieldId: query.filterFieldId,
-        operator: "contains",
-        value: query.filterValue
-      }));
-    }
-    if (query.sortFieldId) {
-      params.set("sort", JSON.stringify([{ fieldId: query.sortFieldId, direction: query.sortDirection }]));
-    }
+    const filter = toFilterExpression(query.filters);
+    if (filter) params.set("filter", JSON.stringify(filter));
+    if (query.sorts.length) params.set("sort", JSON.stringify(query.sorts));
     return api<PageEnvelope<RecordRow>>(`/api/tables/${tableId}/records?${params.toString()}`, signal ? { signal } : {});
-  }, [query.filterFieldId, query.filterValue, query.sortDirection, query.sortFieldId]);
+  }, [query.filters, query.sorts]);
 
   const reloadRecords = useCallback(async (tableId: string) => {
     cancelRecordRequests();

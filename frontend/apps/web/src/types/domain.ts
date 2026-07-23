@@ -59,6 +59,46 @@ export type RecordRow = {
   [key: string]: unknown;
 };
 
+export type FilterOperator =
+  | "equals"
+  | "not_equals"
+  | "contains"
+  | "starts_with"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "before"
+  | "after"
+  | "is_empty"
+  | "is_not_empty"
+  | "is_any_of";
+
+export type FilterRule = {
+  kind: "rule";
+  fieldId: string;
+  operator: FilterOperator;
+  value: string;
+};
+
+export type FilterExpression =
+  | {
+      kind: "rule";
+      fieldId: string;
+      operator: FilterOperator;
+      value?: unknown;
+    }
+  | {
+      kind: "group";
+      conjunction: "and" | "or";
+      children: FilterExpression[];
+    };
+
+export type RecordSort = {
+  fieldId: string;
+  direction: "asc" | "desc";
+};
+
 export type SavedView = {
   saved_view_id: string;
   name: string;
@@ -66,7 +106,7 @@ export type SavedView = {
   search: string | null;
   visible_field_ids: string[];
   field_order: string[];
-  filters: { kind: string; fieldId: string; operator: string; value: string }[];
+  filters: FilterExpression[];
   sorts: { field_id: string; direction: string }[];
 };
 

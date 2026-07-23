@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Layers3, Plus, RefreshCcw, Save, Search, Table2 } from "lucide-react";
-import { Selector } from "../../components/Selector.js";
+import { Plus, Save, Search, Table2 } from "lucide-react";
 import { DataGrid } from "../grid/DataGrid.js";
 import { DuplicateRecordDialog } from "../grid/DuplicateRecordDialog.js";
 import { DropdownColorDialog } from "../grid/DropdownColorDialog.js";
+import { FilterSortMenu } from "../grid/FilterSortMenu.js";
 import { useDropdownOptions } from "../grid/useDropdownOptions.js";
 import type { AppController } from "./controllerTypes.js";
 import { fieldValueForInput } from "../../lib/format.js";
@@ -14,11 +14,10 @@ export function TableWorkspace({ controller }: { controller: AppController }) {
   const [recordToDuplicate, setRecordToDuplicate] = useState<RecordRow | null>(null);
   const {
     fields, records, views, activeViewId, setActiveViewId,
-    filterFieldId, setFilterFieldId, filterValue, setFilterValue, sortFieldId,
-    setSortFieldId, sortDirection, setSortDirection, searchValue, setSearchValue,
+    filters, setFilters, sorts, setSorts, searchValue, setSearchValue,
     selectedTableId, visibleFields, searchedRecords, editingCell, setEditingCell,
     draftValue, setDraftValue, hasMore, loadingRows, loadingMore, loadMoreError,
-    createFieldGroup, createSavedView, showAllRecords, deleteView, addField,
+    createSavedView, showAllRecords, deleteView, addField,
     saveCell, duplicateRecord, deleteRecord, openRenameModal, moveField, hideField, deleteField,
     setContextMenu, loadMore, setDropdownColor
   } = controller;
@@ -38,38 +37,13 @@ export function TableWorkspace({ controller }: { controller: AppController }) {
             onChange={(event) => setSearchValue(event.target.value)}
           />
         </div>
-        <Selector
-          icon={<RefreshCcw size={15} />}
-          label="Filter"
-          value={filterFieldId}
-          options={fields.map((field) => ({ value: field.field_id, label: field.name }))}
-          onChange={setFilterFieldId}
+        <FilterSortMenu
+          fields={fields}
+          filters={filters}
+          sorts={sorts}
+          onFiltersChange={setFilters}
+          onSortsChange={setSorts}
         />
-        <input
-          className="toolbar-input"
-          placeholder="Contains"
-          value={filterValue}
-          onChange={(event) => setFilterValue(event.target.value)}
-        />
-        <Selector
-          icon={<RefreshCcw size={15} />}
-          label="Sort"
-          value={sortFieldId}
-          options={fields.map((field) => ({ value: field.field_id, label: field.name }))}
-          onChange={setSortFieldId}
-        />
-        <select
-          className="role-select compact-select"
-          value={sortDirection}
-          onChange={(event) => setSortDirection(event.target.value as "asc" | "desc")}
-        >
-          <option value="asc">Asc</option>
-          <option value="desc">Desc</option>
-        </select>
-        <button type="button" className="small-button" onClick={() => void createFieldGroup()}>
-          <Layers3 size={15} />
-          Group
-        </button>
         <button type="button" className="small-button" onClick={() => void createSavedView()}>
           <Save size={15} />
           View

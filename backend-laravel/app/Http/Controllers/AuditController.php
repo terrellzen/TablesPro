@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\Authorization\PermissionService;
+use App\Support\AuditEventSerializer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,10 @@ final class AuditController
         $rows = DB::table('app.audit_events')->where('workspace_id', $workspaceId)->orderByDesc('occurred_at')->orderByDesc('event_id')->limit($limit)->get([
             'event_id', 'workspace_id', 'actor_user_id', 'action', 'entity_type', 'entity_id', 'occurred_at', 'request_id', 'job_id', 'outcome', 'diff', 'metadata',
         ]);
-        return response()->json(['data' => $rows, 'page' => ['nextCursor' => null, 'previousCursor' => null, 'hasMore' => $rows->count() === $limit, 'requestedLimit' => $limit]]);
+
+        return response()->json([
+            'data' => $rows->map(fn (object $row): array => AuditEventSerializer::fromRow($row)),
+            'page' => ['nextCursor' => null, 'previousCursor' => null, 'hasMore' => $rows->count() === $limit, 'requestedLimit' => $limit],
+        ]);
     }
 }

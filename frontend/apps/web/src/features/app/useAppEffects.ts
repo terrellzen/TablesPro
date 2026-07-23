@@ -2,9 +2,10 @@ import { useEffect } from "react";
 import { api } from "../../lib/api.js";
 import { errorMessage } from "../../lib/format.js";
 import type {
-  AppTable, AuditEvent, AuthUser, Base, Field, PageEnvelope, RecordRow, SavedView,
-  UserProfile, WorkspaceMember
+  AppTable, AuditEvent, AuthUser, Base, Field, FilterRule, PageEnvelope, RecordRow,
+  RecordSort, SavedView, UserProfile, WorkspaceMember
 } from "../../types/domain.js";
+import { filtersFromView, sortsFromView } from "../grid/viewQuery.js";
 import type { AsyncLoader, StateSetter, StatusSetter } from "./actions/actionTypes.js";
 
 type AppEffectsOptions = {
@@ -18,6 +19,7 @@ type AppEffectsOptions = {
   schemaTableId: string | null;
   activeViewId: string | null;
   views: SavedView[];
+  fields: Field[];
   loadAppConfig: () => Promise<void>;
   loadCurrentUser: () => Promise<void>;
   loadWorkspaces: () => Promise<void>;
@@ -39,10 +41,8 @@ type AppEffectsOptions = {
   setMembers: StateSetter<WorkspaceMember[]>;
   setUsers: StateSetter<UserProfile[]>;
   setSearchValue: StateSetter<string>;
-  setFilterFieldId: StateSetter<string>;
-  setFilterValue: StateSetter<string>;
-  setSortFieldId: StateSetter<string>;
-  setSortDirection: StateSetter<"asc" | "desc">;
+  setFilters: StateSetter<FilterRule[]>;
+  setSorts: StateSetter<RecordSort[]>;
   setStatus: StatusSetter;
 };
 
@@ -111,10 +111,8 @@ export function useAppEffects(options: AppEffectsOptions) {
     options.setViews([]);
     options.setActiveViewId(null);
     options.setSearchValue("");
-    options.setFilterFieldId("");
-    options.setFilterValue("");
-    options.setSortFieldId("");
-    options.setSortDirection("asc");
+    options.setFilters([]);
+    options.setSorts([]);
     options.setRecords([]);
     options.cancelRecordRequests();
     Promise.all([
@@ -146,12 +144,9 @@ export function useAppEffects(options: AppEffectsOptions) {
         hidden: view.field_order?.length > 0 ? !visibleFieldIds.has(field.field_id) : false
       })));
     options.setSearchValue(view.search ?? "");
-    const filter = view.filters?.[0];
-    options.setFilterFieldId(filter?.fieldId ?? "");
-    options.setFilterValue(filter?.value ?? "");
-    const sort = view.sorts?.[0];
-    options.setSortFieldId(sort?.field_id ?? "");
-    options.setSortDirection(sort?.direction === "desc" ? "desc" : "asc");
+    const fieldIds = new Set(options.fields.map((field) => field.field_id));
+    options.setFilters(filtersFromView(view.filters).filter((filter) => fieldIds.has(filter.fieldId)));
+    options.setSorts(sortsFromView(view.sorts).filter((sort) => fieldIds.has(sort.fieldId)));
   }, [options.activeViewId, options.views]);
 
   useEffect(() => {

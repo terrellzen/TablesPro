@@ -1,6 +1,9 @@
 import { api, mutate, request } from "../../../lib/api.js";
 import { errorMessage } from "../../../lib/format.js";
-import type { Field, PageEnvelope, SavedView } from "../../../types/domain.js";
+import type {
+  Field, FilterRule, PageEnvelope, RecordSort, SavedView
+} from "../../../types/domain.js";
+import { toFilterExpression } from "../../grid/viewQuery.js";
 import type { ModalEntity } from "../../../types/ui.js";
 import type { AsyncLoader, StateSetter, StatusSetter } from "./actionTypes.js";
 
@@ -8,10 +11,8 @@ type ViewActionsOptions = {
   selectedWorkspaceId: string | null;
   selectedTableId: string | null;
   activeViewId: string | null;
-  filterFieldId: string;
-  filterValue: string;
-  sortFieldId: string;
-  sortDirection: "asc" | "desc";
+  filters: FilterRule[];
+  sorts: RecordSort[];
   searchValue: string;
   fields: Field[];
   visibleFields: Field[];
@@ -27,8 +28,8 @@ type ViewActionsOptions = {
 
 export function useViewActions(options: ViewActionsOptions) {
   const {
-    selectedWorkspaceId, selectedTableId, activeViewId, filterFieldId, filterValue,
-    sortFieldId, sortDirection, searchValue, fields, visibleFields, showAllRecords,
+    selectedWorkspaceId, selectedTableId, activeViewId, filters, sorts,
+    searchValue, fields, visibleFields, showAllRecords,
     setViews, setActiveViewId, reloadRecords, loadAuditEvents, setModalEntity,
     setModalValue, setStatus
   } = options;
@@ -42,10 +43,7 @@ export function useViewActions(options: ViewActionsOptions) {
   async function createViewWithName(name: string) {
     if (!selectedTableId || !selectedWorkspaceId) return;
     const trimmedName = name.trim();
-    const filters = filterFieldId && filterValue
-      ? [{ kind: "rule", fieldId: filterFieldId, operator: "contains", value: filterValue }]
-      : [];
-    const sorts = sortFieldId ? [{ fieldId: sortFieldId, direction: sortDirection }] : [];
+    const filterExpression = toFilterExpression(filters);
     try {
       const response = await mutate<{ data: { saved_view_id: string } }>(`/api/tables/${selectedTableId}/views`, {
         name: trimmedName,
@@ -53,7 +51,7 @@ export function useViewActions(options: ViewActionsOptions) {
         search: searchValue || null,
         visibleFieldIds: visibleFields.map((field) => field.field_id),
         fieldOrder: fields.map((field) => field.field_id),
-        filters,
+        filters: filterExpression ? [filterExpression] : [],
         sorts
       });
       const viewResponse = await api<PageEnvelope<SavedView>>(`/api/tables/${selectedTableId}/views`);
@@ -79,18 +77,5 @@ export function useViewActions(options: ViewActionsOptions) {
     }
   }
 
-  async function createFieldGroup() {
-    if (!selectedTableId || !selectedWorkspaceId) return;
-    setModalEntity({ mode: "create", type: "fieldGroup" });
-    setModalValue("");
-  }
-
-  async function createFieldGroupWithName(name: string) {
-    if (!selectedTableId || !selectedWorkspaceId) return;
-    await mutate(`/api/tables/${selectedTableId}/field-groups`, { name });
-    await loadAuditEvents(selectedWorkspaceId);
-    setStatus({ tone: "success", text: "Column group created" });
-  }
-
-  return { createSavedView, createViewWithName, deleteView, createFieldGroup, createFieldGroupWithName };
+  return { createSavedView, createViewWithName, deleteView };
 }

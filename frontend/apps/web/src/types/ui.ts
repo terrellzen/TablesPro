@@ -11,7 +11,7 @@ export type ContextMenuItem = {
 
 export type ModalEntity = {
   mode: "rename" | "create";
-  type: "workspace" | "base" | "table" | "field" | "view" | "fieldGroup";
+  type: "workspace" | "base" | "table" | "field" | "view";
   id?: string;
   parentId?: string;
   fieldType?: FieldType;

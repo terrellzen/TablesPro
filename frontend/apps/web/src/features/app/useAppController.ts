@@ -2,8 +2,8 @@ import { useCallback, useMemo, useState } from "react";
 import { getConfiguredApiBaseUrl } from "../../lib/api.js";
 import { useThemePreference } from "../../lib/useThemePreference.js";
 import type {
-  AdminWorkspace, AppTable, AuditEvent, AuthUser, Base, Field, SavedView, Status,
-  UserProfile, Workspace, WorkspaceMember
+  AdminWorkspace, AppTable, AuditEvent, AuthUser, Base, Field, FilterRule, RecordSort,
+  SavedView, Status, UserProfile, Workspace, WorkspaceMember
 } from "../../types/domain.js";
 import type { ContextMenuItem, ModalEntity } from "../../types/ui.js";
 import { useRecordPagination } from "../grid/useRecordPagination.js";
@@ -36,10 +36,8 @@ export function useAppController() {
   const [adminWorkspaces, setAdminWorkspaces] = useState<AdminWorkspace[]>([]);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
-  const [filterFieldId, setFilterFieldId] = useState("");
-  const [filterValue, setFilterValue] = useState("");
-  const [sortFieldId, setSortFieldId] = useState("");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [filters, setFilters] = useState<FilterRule[]>([]);
+  const [sorts, setSorts] = useState<RecordSort[]>([]);
   const [searchValue, setSearchValue] = useState("");
   const [showAdmin, setShowAdmin] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
@@ -59,7 +57,7 @@ export function useAppController() {
     records, setRecords, hasMore, loadingMore, loadingRows, loadMoreError,
     reloadRecords, loadMore, cancelRecordRequests
   } = useRecordPagination({
-    selectedTableId, filterFieldId, filterValue, sortFieldId, sortDirection,
+    selectedTableId, filters, sorts,
     onError: reportRecordError
   });
 
@@ -91,21 +89,19 @@ export function useAppController() {
   useAppEffects({
     apiServerUrl, currentUser, profile, selectedWorkspaceId,
     selectedWorkspaceRole: selectedWorkspace?.role ?? null,
-    selectedBaseId, selectedTableId, schemaTableId, activeViewId, views, loadAppConfig,
+    selectedBaseId, selectedTableId, schemaTableId, activeViewId, views, fields, loadAppConfig,
     loadCurrentUser, loadWorkspaces, loadBases, loadTables, loadAuditEvents,
     loadAdminWorkspaces, loadAdminData, reloadRecords, cancelRecordRequests,
     setSchemaTableId, setBases, setTables, setFields, setRecords, setViews,
     setActiveViewId, setAuditEvents, setMembers, setUsers, setSearchValue,
-    setFilterFieldId, setFilterValue, setSortFieldId, setSortDirection, setStatus
+    setFilters, setSorts, setStatus
   });
 
   function showAllRecords() {
     setActiveViewId(null);
     setSearchValue("");
-    setFilterFieldId("");
-    setFilterValue("");
-    setSortFieldId("");
-    setSortDirection("asc");
+    setFilters([]);
+    setSorts([]);
     setFields((current) => current.map((field) => ({ ...field, hidden: false })));
   }
 
@@ -159,8 +155,8 @@ export function useAppController() {
     setRecords, reloadRecords, loadAuditEvents, setStatus
   });
   const viewActions = useViewActions({
-    selectedWorkspaceId, selectedTableId, activeViewId, filterFieldId, filterValue,
-    sortFieldId, sortDirection, searchValue, fields, visibleFields, showAllRecords,
+    selectedWorkspaceId, selectedTableId, activeViewId, filters, sorts,
+    searchValue, fields, visibleFields, showAllRecords,
     setViews, setActiveViewId, reloadRecords, loadAuditEvents, setModalEntity,
     setModalValue, setStatus
   });
@@ -203,7 +199,6 @@ export function useAppController() {
       if (type === "table") void tableActions.createTableWithName(modalValue);
       if (type === "field") void fieldActions.createFieldWithName(modalValue, fieldType!, parentId!);
       if (type === "view") void viewActions.createViewWithName(modalValue);
-      if (type === "fieldGroup") void viewActions.createFieldGroupWithName(modalValue);
     }
     setModalEntity(null);
   }
@@ -213,8 +208,7 @@ export function useAppController() {
     authChecked, currentUser, apiServerUrl, signUpEnabled, profile, setProfile,
     workspaces, bases, tables, fields, records, views, activeViewId, setActiveViewId,
     auditEvents, adminWorkspaces, members, users,
-    filterFieldId, setFilterFieldId, filterValue, setFilterValue,
-    sortFieldId, setSortFieldId, sortDirection, setSortDirection,
+    filters, setFilters, sorts, setSorts,
     searchValue, setSearchValue, showAdmin, setShowAdmin, showMembers, setShowMembers,
     selectedWorkspaceId, setSelectedWorkspaceId, selectedBaseId, setSelectedBaseId,
     selectedTableId, setSelectedTableId, editingCell, setEditingCell,
@@ -236,7 +230,6 @@ export function useAppController() {
     duplicateBase: baseActions.duplicateBase,
     duplicateTable: tableActions.duplicateTable,
     createSavedView: viewActions.createSavedView,
-    createFieldGroup: viewActions.createFieldGroup,
     exportCsv: tableActions.exportCsv,
     saveMemberPermissions: adminActions.saveMemberPermissions,
     removeMember: adminActions.removeMember,
