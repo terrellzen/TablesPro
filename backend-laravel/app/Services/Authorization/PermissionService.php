@@ -17,6 +17,10 @@ final class PermissionService
 
     public function workspace(User $user, string $workspaceId, string $permission): array
     {
+        $profile = DB::table('app.user_profiles')->where('user_id', $user->getKey())->first();
+        if (in_array($profile?->role, ['owner', 'admin'], true)) {
+            return ['workspaceId' => $workspaceId, 'permissions' => ['workspace' => 'admin', 'bases' => [], 'tables' => []]];
+        }
         $row = DB::table('app.workspace_members as wm')
             ->join('app.workspaces as w', 'w.workspace_id', '=', 'wm.workspace_id')
             ->where('wm.workspace_id', $workspaceId)->where('wm.user_id', $user->getKey())
@@ -32,6 +36,12 @@ final class PermissionService
 
     public function base(User $user, string $baseId, string $permission): array
     {
+        $profile = DB::table('app.user_profiles')->where('user_id', $user->getKey())->first();
+        if (in_array($profile?->role, ['owner', 'admin'], true)) {
+            $workspaceId = DB::table('app.bases')->where('base_id', $baseId)->whereNull('deleted_at')->value('workspace_id');
+            if (! $workspaceId) throw ApiException::notFound('Base was not found');
+            return ['workspaceId' => $workspaceId, 'baseId' => $baseId, 'permissions' => ['workspace' => 'admin', 'bases' => [], 'tables' => []]];
+        }
         $row = DB::table('app.bases as b')->join('app.workspace_members as wm', 'wm.workspace_id', '=', 'b.workspace_id')
             ->where('b.base_id', $baseId)->where('wm.user_id', $user->getKey())->whereNull('b.deleted_at')
             ->select('b.workspace_id', 'wm.role', 'wm.permissions')->first();
@@ -54,6 +64,14 @@ final class PermissionService
 
     public function table(User $user, string $tableId, string $permission): array
     {
+        $profile = DB::table('app.user_profiles')->where('user_id', $user->getKey())->first();
+        if (in_array($profile?->role, ['owner', 'admin'], true)) {
+            $row = DB::table('app.tables as t')->join('app.bases as b', 'b.base_id', '=', 't.base_id')
+                ->where('t.table_id', $tableId)->whereNull('t.deleted_at')->whereNull('b.deleted_at')
+                ->select('b.workspace_id', 'b.base_id')->first();
+            if (! $row) throw ApiException::notFound('Table was not found');
+            return ['workspaceId' => $row->workspace_id, 'baseId' => $row->base_id, 'permissions' => ['workspace' => 'admin', 'bases' => [], 'tables' => []]];
+        }
         $row = DB::table('app.tables as t')->join('app.bases as b', 'b.base_id', '=', 't.base_id')
             ->join('app.workspace_members as wm', 'wm.workspace_id', '=', 'b.workspace_id')
             ->where('t.table_id', $tableId)->where('wm.user_id', $user->getKey())

@@ -20,10 +20,18 @@ final class BaseController
     public function index(Request $request, string $workspaceId): JsonResponse
     {
         $this->permissions->workspace($request->user(), $workspaceId, 'workspace:read');
-        $rows = DB::table('app.bases as b')->join('app.workspace_members as wm', fn ($join) => $join->on('wm.workspace_id', '=', 'b.workspace_id')->where('wm.user_id', $request->user()->getKey()))
-            ->where('b.workspace_id', $workspaceId)->whereNull('b.deleted_at')
-            ->whereRaw("wm.permissions IS NULL OR wm.permissions->>'workspace' IS NOT NULL OR jsonb_exists(wm.permissions->'bases', b.base_id::text) OR EXISTS (SELECT 1 FROM app.tables t WHERE t.base_id=b.base_id AND jsonb_exists(wm.permissions->'tables', t.table_id::text))")
-            ->select('b.base_id', 'b.workspace_id', 'b.name', 'b.created_at', 'b.updated_at', 'b.row_version')->orderByDesc('b.updated_at')->get();
+        $profile = DB::table('app.user_profiles')->where('user_id', $request->user()->getKey())->first();
+        $isAdmin = in_array($profile?->role, ['owner', 'admin'], true);
+
+        $query = DB::table('app.bases as b')->where('b.workspace_id', $workspaceId)->whereNull('b.deleted_at');
+        if ($isAdmin) {
+            $query->orderByDesc('b.updated_at');
+        } else {
+            $query->join('app.workspace_members as wm', fn ($join) => $join->on('wm.workspace_id', '=', 'b.workspace_id')->where('wm.user_id', $request->user()->getKey()))
+                ->whereRaw("wm.permissions IS NULL OR wm.permissions->>'workspace' IS NOT NULL OR jsonb_exists(wm.permissions->'bases', b.base_id::text) OR EXISTS (SELECT 1 FROM app.tables t WHERE t.base_id=b.base_id AND jsonb_exists(wm.permissions->'tables', t.table_id::text))")
+                ->orderByDesc('b.updated_at');
+        }
+        $rows = $query->select('b.base_id', 'b.workspace_id', 'b.name', 'b.created_at', 'b.updated_at', 'b.row_version')->get();
 
         return response()->json(['data' => $rows]);
     }

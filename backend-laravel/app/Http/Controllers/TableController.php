@@ -18,11 +18,19 @@ final class TableController
     public function index(Request $request, string $baseId): JsonResponse
     {
         $this->permissions->base($request->user(), $baseId, 'table:read');
-        $rows = DB::table('app.tables as t')->join('app.bases as b', 'b.base_id', '=', 't.base_id')
-            ->join('app.workspace_members as wm', fn ($join) => $join->on('wm.workspace_id', '=', 'b.workspace_id')->where('wm.user_id', $request->user()->getKey()))
-            ->where('t.base_id', $baseId)->whereNull('t.deleted_at')
-            ->whereRaw("wm.permissions IS NULL OR wm.permissions->>'workspace' IS NOT NULL OR jsonb_exists(wm.permissions->'bases', t.base_id::text) OR jsonb_exists(wm.permissions->'tables', t.table_id::text)")
-            ->select('t.table_id', 't.base_id', 't.name', 't.primary_display_field_id', 't.created_at', 't.updated_at', 't.row_version')->orderBy('t.created_at')->get();
+        $profile = DB::table('app.user_profiles')->where('user_id', $request->user()->getKey())->first();
+        $isAdmin = in_array($profile?->role, ['owner', 'admin'], true);
+
+        $query = DB::table('app.tables as t')->join('app.bases as b', 'b.base_id', '=', 't.base_id')
+            ->where('t.base_id', $baseId)->whereNull('t.deleted_at');
+        if ($isAdmin) {
+            $query->orderBy('t.created_at');
+        } else {
+            $query->join('app.workspace_members as wm', fn ($join) => $join->on('wm.workspace_id', '=', 'b.workspace_id')->where('wm.user_id', $request->user()->getKey()))
+                ->whereRaw("wm.permissions IS NULL OR wm.permissions->>'workspace' IS NOT NULL OR jsonb_exists(wm.permissions->'bases', t.base_id::text) OR jsonb_exists(wm.permissions->'tables', t.table_id::text)")
+                ->orderBy('t.created_at');
+        }
+        $rows = $query->select('t.table_id', 't.base_id', 't.name', 't.primary_display_field_id', 't.created_at', 't.updated_at', 't.row_version')->get();
 
         return response()->json(['data' => $rows]);
     }
