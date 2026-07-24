@@ -29,7 +29,7 @@ export function WorkspaceSidebar(props: {
         <div className="brand-mark" aria-hidden="true">TP</div>
         <div>
           <strong>TablesPro</strong>
-          <span>{props.selectedWorkspace?.role ?? props.currentUser.email ?? "signed in"}</span>
+          <span>{props.currentUser.name || props.currentUser.email || "signed in"}</span>
         </div>
       </div>
       <AccountBlock

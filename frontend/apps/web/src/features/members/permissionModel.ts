@@ -2,12 +2,39 @@ import type {
   AccessLevel, AppTable, Base, MemberPermissions, WorkspaceMember
 } from "../../types/domain.js";
 
-export const accessLevels: AccessLevel[] = ["read", "edit", "admin"];
+export const accessLevels: AccessLevel[] = ["read", "edit"];
+
+export function normalizePermissions(
+  value: unknown,
+  fallbackWorkspace: AccessLevel | null = null
+): MemberPermissions {
+  const source = isRecord(value) ? value : {};
+  const workspace = "workspace" in source ? validAccess(source.workspace) : fallbackWorkspace;
+  const bases: MemberPermissions["bases"] = {};
+  const tables: MemberPermissions["tables"] = {};
+
+  if (isRecord(source.bases)) {
+    for (const [baseId, level] of Object.entries(source.bases)) {
+      const access = validAccess(level);
+      if (access) bases[baseId] = access === "admin" ? "edit" : access;
+    }
+  }
+
+  if (isRecord(source.tables)) {
+    for (const [tableId, value] of Object.entries(source.tables)) {
+      if (!isRecord(value)) continue;
+      const table = resourceAccess(validAccess(value.table));
+      const record = resourceAccess(validAccess(value.record));
+      if (table || record) tables[tableId] = { ...(table && { table }), ...(record && { record }) };
+    }
+  }
+
+  return { workspace, bases, tables };
+}
 
 export function permissionsForMember(member?: WorkspaceMember): MemberPermissions {
-  if (member?.permissions) return structuredClone(member.permissions);
   const workspace = member?.role === "admin" ? "admin" : member?.role === "editor" ? "edit" : "read";
-  return { workspace, bases: {}, tables: {} };
+  return normalizePermissions(member?.permissions, workspace);
 }
 
 export function inheritedBaseAccess(permissions: MemberPermissions): AccessLevel | null {
@@ -71,11 +98,11 @@ export function accessSummary(permissions: MemberPermissions, bases: Base[], tab
 export function isDestructive(permissions: MemberPermissions): boolean {
   return permissions.workspace === "edit" || permissions.workspace === "admin" ||
     Object.values(permissions.bases).some((level) => level === "edit" || level === "admin") ||
-    Object.values(permissions.tables).some((grant) => grant.table === "edit" || grant.table === "admin" || grant.record === "admin");
+    Object.values(permissions.tables).some((grant) => grant.table === "edit" || grant.table === "admin" || grant.record === "edit" || grant.record === "admin");
 }
 
 export function rank(level: AccessLevel | null | undefined): number {
-  return level ? accessLevels.indexOf(level) + 1 : 0;
+  return level === "admin" ? 3 : level === "edit" ? 2 : level === "read" ? 1 : 0;
 }
 
 function maxAccess(...levels: (AccessLevel | null | undefined)[]): AccessLevel | null {
@@ -84,4 +111,18 @@ function maxAccess(...levels: (AccessLevel | null | undefined)[]): AccessLevel |
 
 function effectiveRecordAccess(permissions: MemberPermissions, table: AppTable): AccessLevel | null {
   return maxAccess(inheritedRecordAccess(permissions, table.base_id, table.table_id), permissions.tables[table.table_id]?.record);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function resourceAccess(value: AccessLevel | null): AccessLevel | null {
+  return value === "admin" ? "edit" : value;
+}
+
+function validAccess(value: unknown): AccessLevel | null {
+  return typeof value === "string" && ["read", "edit", "admin"].includes(value)
+    ? value as AccessLevel
+    : null;
 }

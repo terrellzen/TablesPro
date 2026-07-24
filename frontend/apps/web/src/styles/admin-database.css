@@ -70,10 +70,16 @@
   letter-spacing: 0.05em;
 }
 
-.db-table-name {
-  font-family: monospace;
-  font-size: 12px;
-}
+.db-table-identity { min-width: 0; }
+
+.db-table-path { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.db-table-path span { display: inline-flex; align-items: center; gap: 6px; }
+.db-table-path b { color: var(--color-text-muted); font-weight: 400; }
+.db-table-path strong { font-weight: 600; }
+
+.db-table-technical { margin-top: 3px; color: var(--color-text-muted); font-size: 10px; }
+.db-table-technical summary { width: max-content; cursor: pointer; }
+.db-table-technical code { display: block; margin-top: 3px; overflow-wrap: anywhere; color: var(--color-text-muted); }
 
 .password-change-form {
   display: grid;

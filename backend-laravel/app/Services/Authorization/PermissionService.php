@@ -115,9 +115,15 @@ final class PermissionService
         if ($level === 'read') {
             return $read;
         }
-        $edit = $read || in_array($permission, ['table:create', 'table:update', 'table:manageSchema', 'field:create', 'field:update', 'field:delete', 'view:create', 'view:update', 'view:delete', 'record:create', 'record:update', 'record:bulkUpdate', 'record:import'], true);
+        $edit = $read || in_array($permission, ['table:create', 'table:update', 'table:delete', 'table:manageSchema', 'field:create', 'field:update', 'field:delete', 'view:create', 'view:update', 'view:delete', 'record:create', 'record:update', 'record:delete', 'record:bulkUpdate', 'record:import'], true);
+        if ($scope === 'base' && $level === 'edit' && $resource === 'base') {
+            return in_array($action, ['read', 'update', 'delete'], true);
+        }
+        if ($scope === 'record' && $level === 'edit') {
+            return $resource === 'record' || $read;
+        }
         if ($level === 'edit') {
-            return $edit && ! in_array($permission, ['table:delete', 'record:delete'], true);
+            return $edit;
         }
         if ($scope === 'record') {
             return $resource === 'record' || $read;

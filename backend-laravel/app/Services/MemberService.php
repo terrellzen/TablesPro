@@ -21,7 +21,7 @@ final class MemberService
         $baseCount = DB::table('app.bases')->where('workspace_id', $workspaceId)->whereNull('deleted_at')->whereIn('base_id', array_keys($value['bases']))->count();
         $tableCount = DB::table('app.tables as t')->join('app.bases as b', 'b.base_id', '=', 't.base_id')->where('b.workspace_id', $workspaceId)->whereNull('t.deleted_at')->whereNull('b.deleted_at')->whereIn('t.table_id', array_keys($value['tables']))->count();
         if ($baseCount !== count($value['bases']) || $tableCount !== count($value['tables'])) throw new ApiException(400, 'VALIDATION_ERROR', 'A permission references a base or table outside this workspace');
-        if ($this->destructive($value) && ! $confirmed) throw new ApiException(400, 'VALIDATION_ERROR', 'Confirm destructive administrative permissions before saving');
+        if ($this->destructive($value) && ! $confirmed) throw new ApiException(400, 'VALIDATION_ERROR', 'Confirm destructive permissions before saving');
 
         return $value;
     }
@@ -78,7 +78,7 @@ final class MemberService
     {
         if (in_array($permissions['workspace'], ['edit', 'admin'], true)) return true;
         if (collect($permissions['bases'])->contains(fn ($level) => in_array($level, ['edit', 'admin'], true))) return true;
-        return collect($permissions['tables'])->contains(fn ($grant) => in_array($grant['table'] ?? null, ['edit', 'admin'], true) || ($grant['record'] ?? null) === 'admin');
+        return collect($permissions['tables'])->contains(fn ($grant) => in_array($grant['table'] ?? null, ['edit', 'admin'], true) || in_array($grant['record'] ?? null, ['edit', 'admin'], true));
     }
 
     private function role(array $permissions): string

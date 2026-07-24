@@ -34,6 +34,7 @@ export function registerFieldRoutes(app: FastifyInstance): void {
       const { workspaceId } = await authorizeTable(actor, tableId, { resource: "field", action: "update" });
       const body = readBodyObject(request);
       const name = readRequiredString(body, "name");
+      const previousName = (await pool.query<{ name: string }>("SELECT name FROM app.fields WHERE field_id = $1 AND table_id = $2 AND tombstoned_at IS NULL", [fieldId, tableId])).rows[0]?.name;
       const result = await pool.query(
         `
           UPDATE app.fields
@@ -54,7 +55,8 @@ export function registerFieldRoutes(app: FastifyInstance): void {
         entityId: fieldId,
         requestId: request.id,
         outcome: "success",
-        metadata: { tableId, name }
+        metadata: { tableId, name },
+        diff: { Name: { before: previousName ?? null, after: name } }
       });
       return sendOk(result.rows[0]);
     } catch (error) {

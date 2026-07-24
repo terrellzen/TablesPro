@@ -1,5 +1,6 @@
 import { mutate, request } from "../../../lib/api.js";
 import { errorMessage } from "../../../lib/format.js";
+import { notifyAuditChanged } from "../../../lib/auditEvents.js";
 import type { CreateUserInput, MemberPermissions, UserProfile, WorkspaceMember } from "../../../types/domain.js";
 import type { AsyncLoader, StateSetter, StatusSetter } from "./actionTypes.js";
 
@@ -30,6 +31,7 @@ export function useAdminActions(options: AdminActionsOptions) {
         : `/api/workspaces/${selectedWorkspaceId}/members`;
       await mutate(path, { userId: userId.trim(), permissions, confirmDestructive }, existing ? "PATCH" : "POST");
       await Promise.all([loadAdminData(selectedWorkspaceId), loadAuditEvents(selectedWorkspaceId)]);
+      notifyAuditChanged();
       setStatus({ tone: "success", text: existing ? "Member permissions updated" : "Member added" });
       return true;
     } catch (error) {
@@ -43,6 +45,7 @@ export function useAdminActions(options: AdminActionsOptions) {
     try {
       await request(`/api/workspaces/${selectedWorkspaceId}/members/${encodeURIComponent(member.user_id)}`, { method: "DELETE" });
       await Promise.all([loadAdminData(selectedWorkspaceId), loadAuditEvents(selectedWorkspaceId)]);
+      notifyAuditChanged();
       setStatus({ tone: "success", text: "Member removed" });
     } catch (error) {
       setStatus({ tone: "danger", text: errorMessage(error) });
@@ -59,6 +62,7 @@ export function useAdminActions(options: AdminActionsOptions) {
         canManageUsers: patch.can_manage_users ?? user.can_manage_users
       }, "PATCH");
       setUsers((current) => current.map((entry) => entry.user_id === user.user_id ? response.data : entry));
+      notifyAuditChanged();
       setStatus({ tone: "success", text: "User permissions updated" });
     } catch (error) {
       setStatus({ tone: "danger", text: errorMessage(error) });
@@ -70,6 +74,7 @@ export function useAdminActions(options: AdminActionsOptions) {
     try {
       await request(`/api/users/${encodeURIComponent(user.user_id)}`, { method: "DELETE" });
       setUsers((current) => current.filter((entry) => entry.user_id !== user.user_id));
+      notifyAuditChanged();
       setStatus({ tone: "success", text: "User disabled" });
     } catch (error) {
       setStatus({ tone: "danger", text: errorMessage(error) });
@@ -80,6 +85,7 @@ export function useAdminActions(options: AdminActionsOptions) {
     try {
       const response = await mutate<{ data: UserProfile }>("/api/users", fields, "POST");
       setUsers((current) => [...current, response.data].sort((a, b) => a.handle.localeCompare(b.handle)));
+      notifyAuditChanged();
       setStatus({ tone: "success", text: `Created @${response.data.handle}` });
       return response.data;
     } catch (error) {
@@ -91,6 +97,7 @@ export function useAdminActions(options: AdminActionsOptions) {
   async function changeUserPassword(userId: string, adminPassword: string, newPassword: string): Promise<boolean> {
     try {
       await mutate(`/api/users/${encodeURIComponent(userId)}/password`, { adminPassword, newPassword });
+      notifyAuditChanged();
       setStatus({ tone: "success", text: "Password changed" });
       return true;
     } catch (error) {

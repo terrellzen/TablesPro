@@ -50,30 +50,30 @@ export function tableOverride(grant: TableGrant | undefined): PermissionOverride
 export function hasDestructiveAccess(permissions: MemberPermissions): boolean {
   return permissions.workspace === "edit" || permissions.workspace === "admin" ||
     Object.values(permissions.bases).some((level) => level === "edit" || level === "admin") ||
-    Object.values(permissions.tables).some((grant) => grant.table === "edit" || grant.table === "admin" || grant.record === "admin");
+    Object.values(permissions.tables).some((grant) => grant.table === "edit" || grant.table === "admin" || grant.record === "edit" || grant.record === "admin");
 }
 
 function grantsForBase(level: AccessLevel): Permission[] {
   const read = permissions(["base:read", "table:read", "field:read", "view:read", "record:read", "record:export"]);
   if (level === "read") return read;
   const edit = permissions(["table:create", "table:update", "table:delete", "table:manageSchema", "field:create", "field:update", "field:delete", "view:create", "view:update", "view:delete", "record:create", "record:update", "record:delete", "record:bulkUpdate", "record:import"]);
-  return level === "edit" ? [...read, ...edit] : [...read, ...edit, permission("base:update"), permission("base:delete")];
+  return [...read, ...edit, permission("base:update"), permission("base:delete")];
 }
 
 function grantsForTable(level: AccessLevel | undefined): Permission[] {
   if (!level) return [];
   const read = permissions(["table:read", "field:read", "view:read", "record:read", "record:export"]);
   if (level === "read") return read;
-  const edit = permissions(["table:update", "table:manageSchema", "field:create", "field:update", "field:delete", "view:create", "view:update", "view:delete", "record:create", "record:update", "record:bulkUpdate", "record:import"]);
-  return level === "edit" ? [...read, ...edit] : [...read, ...edit, permission("table:delete"), permission("record:delete")];
+  const edit = permissions(["table:update", "table:delete", "table:manageSchema", "field:create", "field:update", "field:delete", "view:create", "view:update", "view:delete", "record:create", "record:update", "record:delete", "record:bulkUpdate", "record:import"]);
+  return [...read, ...edit];
 }
 
 function grantsForRecords(level: AccessLevel | undefined): Permission[] {
   if (!level) return [];
   const metadata = permissions(["table:read", "field:read", "view:read", "record:read"]);
   if (level === "read") return metadata;
-  const edit = permissions(["record:create", "record:update"]);
-  return level === "edit" ? [...metadata, ...edit] : [...metadata, ...edit, permission("record:delete")];
+  const edit = permissions(["record:create", "record:update", "record:delete"]);
+  return [...metadata, ...edit];
 }
 
 function permissions(values: string[]): Permission[] {
@@ -90,9 +90,14 @@ function readLevel(value: unknown): AccessLevel {
   return value as AccessLevel;
 }
 
+function readResourceLevel(value: unknown): AccessLevel {
+  const level = readLevel(value);
+  return level === "admin" ? "edit" : level;
+}
+
 function readLevelRecord(value: unknown): Record<string, AccessLevel> {
   if (!value || typeof value !== "object" || Array.isArray(value)) invalid();
-  return Object.fromEntries(Object.entries(value).map(([id, level]) => [readUuid(id), readLevel(level)]));
+  return Object.fromEntries(Object.entries(value).map(([id, level]) => [readUuid(id), readResourceLevel(level)]));
 }
 
 function readTableRecord(value: unknown): Record<string, TableGrant> {
@@ -102,8 +107,8 @@ function readTableRecord(value: unknown): Record<string, TableGrant> {
     const entry = grant as Record<string, unknown>;
     if (entry.table === undefined && entry.record === undefined) invalid();
     return [readUuid(id), {
-      ...(entry.table === undefined ? {} : { table: readLevel(entry.table) }),
-      ...(entry.record === undefined ? {} : { record: readLevel(entry.record) })
+      ...(entry.table === undefined ? {} : { table: readResourceLevel(entry.table) }),
+      ...(entry.record === undefined ? {} : { record: readResourceLevel(entry.record) })
     }];
   }));
 }

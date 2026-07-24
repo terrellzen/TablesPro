@@ -24,7 +24,7 @@ Route::post('/auth/sign-in/email', [AuthController::class, 'signIn'])->name('aut
 Route::post('/auth/sign-up/email', [AuthController::class, 'signUp'])->name('auth.signup');
 Route::post('/auth/sign-out', [AuthController::class, 'signOut']);
 
-Route::middleware('auth:sanctum')->group(function (): void {
+Route::middleware('auth:web')->group(function (): void {
     Route::get('/users', [UserController::class, 'index']);
     Route::post('/users', [UserController::class, 'store']);
     Route::put('/me/profile', [UserController::class, 'profile']);

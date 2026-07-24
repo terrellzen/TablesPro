@@ -28,9 +28,11 @@ type AppEffectsOptions = {
   loadAuditEvents: AsyncLoader;
   loadAdminWorkspaces: () => Promise<void>;
   loadAdminData: AsyncLoader;
+  loadUsers: () => Promise<void>;
   reloadRecords: AsyncLoader;
   cancelRecordRequests: () => void;
   setSchemaTableId: StateSetter<string | null>;
+  setSelectedTableId: StateSetter<string | null>;
   setBases: StateSetter<Base[]>;
   setTables: StateSetter<AppTable[]>;
   setFields: StateSetter<Field[]>;
@@ -63,11 +65,14 @@ export function useAppEffects(options: AppEffectsOptions) {
   }, [options.profile, options.loadAdminWorkspaces]);
 
   useEffect(() => {
+    if (options.profile?.can_manage_users) void options.loadUsers().catch(() => {});
+  }, [options.profile, options.loadUsers]);
+
+  useEffect(() => {
     if (!options.selectedWorkspaceId) {
       options.setBases([]);
       options.setAuditEvents([]);
       options.setMembers([]);
-      options.setUsers([]);
       options.setSearchValue("");
       return;
     }
@@ -86,6 +91,7 @@ export function useAppEffects(options: AppEffectsOptions) {
 
   useEffect(() => {
     if (!options.selectedBaseId) {
+      options.setSelectedTableId(null);
       options.setTables([]);
       return;
     }

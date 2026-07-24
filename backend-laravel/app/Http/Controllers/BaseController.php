@@ -48,8 +48,9 @@ final class BaseController
     public function update(NameRequest $request, string $baseId): JsonResponse
     {
         $scope = $this->permissions->base($request->user(), $baseId, 'base:update');
+        $previousName = DB::table('app.bases')->where('base_id', $baseId)->whereNull('deleted_at')->value('name');
         $row = $this->metadata->rename('bases', 'base_id', $baseId, (string) $request->string('name'), $request->user()->getKey());
-        $this->audit->write($request, $request->user(), $scope['workspaceId'], 'base.update', 'base', $baseId, ['name' => $row->name]);
+        $this->audit->write($request, $request->user(), $scope['workspaceId'], 'base.update', 'base', $baseId, ['name' => $row->name], ['Name' => ['before' => $previousName, 'after' => $row->name]]);
 
         return response()->json(['data' => $row]);
     }

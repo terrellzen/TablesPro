@@ -3,7 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Exceptions\ApiException;
+<<<<<<< HEAD
 use App\Support\AuditEventSerializer;
+=======
+use App\Services\AuditService;
+>>>>>>> 4798e6e (Audit Logs Fixed and Permission Bugs, and Data Bugs)
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,9 +20,14 @@ final class AdminController
         $name = DB::selectOne('SELECT current_database() AS name')->name;
         $size = DB::selectOne('SELECT pg_database_size(current_database())::text AS size_bytes')->size_bytes;
         $count = DB::table('information_schema.tables')->where('table_schema', 'app_data')->count();
+<<<<<<< HEAD
         $tables = DB::select("SELECT relname AS table_name, n_live_tup AS count FROM pg_stat_user_tables WHERE schemaname='app_data' ORDER BY n_live_tup DESC LIMIT 20");
 
         return response()->json(['database' => ['name' => $name, 'sizeBytes' => (int) $size, 'tableCount' => $count, 'tables' => collect($tables)->map(fn ($row) => ['name' => $row->table_name, 'rowCount' => (int) $row->count])]]);
+=======
+        $tables = DB::select("SELECT stats.relname AS physical_name, tables.name AS table_name, bases.name AS base_name, workspaces.name AS workspace_name, stats.n_live_tup AS count FROM pg_stat_user_tables stats LEFT JOIN app.tables tables ON tables.physical_table_name::text = stats.relname LEFT JOIN app.bases bases ON bases.base_id = tables.base_id LEFT JOIN app.workspaces workspaces ON workspaces.workspace_id = bases.workspace_id WHERE stats.schemaname='app_data' ORDER BY stats.n_live_tup DESC LIMIT 20");
+        return response()->json(['database' => ['name' => $name, 'sizeBytes' => (int) $size, 'tableCount' => $count, 'tables' => collect($tables)->map(fn ($row) => ['physicalName' => $row->physical_name, 'tableName' => $row->table_name ?? $row->physical_name, 'baseName' => $row->base_name, 'workspaceName' => $row->workspace_name, 'rowCount' => (int) $row->count])]]);
+>>>>>>> 4798e6e (Audit Logs Fixed and Permission Bugs, and Data Bugs)
     }
 
     public function workspaces(Request $request): JsonResponse
@@ -50,10 +59,11 @@ final class AdminController
     public function audit(Request $request): JsonResponse
     {
         $this->admin($request);
-        $input = $request->validate(['workspaceId' => ['sometimes', 'uuid'], 'baseId' => ['sometimes', 'uuid'], 'tableId' => ['sometimes', 'uuid'], 'limit' => ['sometimes', 'integer', 'min:1']]);
+        $input = $request->validate(['scope' => ['sometimes', 'in:company,workspace'], 'workspaceId' => ['sometimes', 'uuid'], 'baseId' => ['sometimes', 'uuid'], 'tableId' => ['sometimes', 'uuid'], 'limit' => ['sometimes', 'integer', 'min:1']]);
         $limit = min((int) ($input['limit'] ?? 100), 250);
-        $query = DB::table('app.audit_events as ae')->join('app.workspaces as w', 'w.workspace_id', '=', 'ae.workspace_id')
+        $query = DB::table('app.audit_events as ae')->leftJoin('app.workspaces as w', 'w.workspace_id', '=', 'ae.workspace_id')
             ->leftJoin('app.user_profiles as up', 'up.user_id', '=', 'ae.actor_user_id')
+<<<<<<< HEAD
             ->leftJoin('app.tables as t', DB::raw('t.table_id::text'), '=', DB::raw("ae.metadata->>'tableId'"));
         if (isset($input['workspaceId'])) {
             $query->where('ae.workspace_id', $input['workspaceId']);
@@ -70,6 +80,17 @@ final class AdminController
             'data' => $rows->map(fn (object $row): array => AuditEventSerializer::fromRow($row)),
             'page' => ['nextCursor' => null, 'hasMore' => $rows->count() === $limit],
         ]);
+=======
+            ->leftJoin('app.tables as t', DB::raw("t.table_id"), '=', DB::raw("COALESCE(NULLIF(ae.metadata->>'tableId', '')::uuid, CASE WHEN ae.entity_type = 'table' THEN ae.entity_id::uuid END)"))
+            ->leftJoin('app.bases as b', DB::raw("b.base_id"), '=', DB::raw("COALESCE(t.base_id, CASE WHEN ae.entity_type = 'base' THEN ae.entity_id::uuid END)"));
+        if (($input['scope'] ?? null) === 'company') $query->whereNull('ae.workspace_id');
+        if (($input['scope'] ?? null) === 'workspace') $query->whereNotNull('ae.workspace_id');
+        if (isset($input['workspaceId'])) $query->where('ae.workspace_id', $input['workspaceId']);
+        if (isset($input['baseId'])) $query->where('t.base_id', $input['baseId']);
+        if (isset($input['tableId'])) $query->whereRaw("ae.metadata->>'tableId' = ?", [$input['tableId']]);
+        $rows = $query->orderByDesc('ae.occurred_at')->orderByDesc('ae.event_id')->limit($limit)->get(['ae.*', DB::raw("COALESCE(w.name, ae.metadata->>'workspaceName') AS workspace_name"), 'b.base_id', 'b.name as base_name', 't.table_id', 't.name as table_name', DB::raw('COALESCE(up.display_name, up.handle::text, ae.actor_user_id) AS actor_name'), DB::raw('up.handle::text AS actor_handle')])->map(fn (object $row): object => AuditService::forResponse($row));
+        return response()->json(['data' => $rows, 'page' => ['nextCursor' => null, 'hasMore' => $rows->count() === $limit]]);
+>>>>>>> 4798e6e (Audit Logs Fixed and Permission Bugs, and Data Bugs)
     }
 
     private function admin(Request $request): void

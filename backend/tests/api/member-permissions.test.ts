@@ -27,20 +27,27 @@ describe("hierarchical member permissions", () => {
     expect(isAllowed(subject, { resource: "member", action: "update" })).toBe(false);
   });
 
-  it("keeps table edit separate from table and record deletion", () => {
+  it("allows table edit to update and delete table content", () => {
     const edit = { workspaceRole: "restricted" as const, tableOverride: tableOverride({ table: "edit" }) };
-    const admin = { workspaceRole: "restricted" as const, tableOverride: tableOverride({ table: "admin" }) };
     expect(isAllowed(edit, { resource: "field", action: "update" })).toBe(true);
-    expect(isAllowed(edit, { resource: "record", action: "delete" })).toBe(false);
-    expect(isAllowed(edit, { resource: "table", action: "delete" })).toBe(false);
-    expect(isAllowed(admin, { resource: "record", action: "delete" })).toBe(true);
-    expect(isAllowed(admin, { resource: "table", action: "delete" })).toBe(true);
+    expect(isAllowed(edit, { resource: "record", action: "delete" })).toBe(true);
+    expect(isAllowed(edit, { resource: "table", action: "delete" })).toBe(true);
   });
 
   it("keeps record grants from changing table structure", () => {
-    const subject = { workspaceRole: "restricted" as const, tableOverride: tableOverride({ record: "admin" }) };
+    const subject = { workspaceRole: "restricted" as const, tableOverride: tableOverride({ record: "edit" }) };
     expect(isAllowed(subject, { resource: "record", action: "delete" })).toBe(true);
     expect(isAllowed(subject, { resource: "field", action: "update" })).toBe(false);
+  });
+
+  it("normalizes legacy resource admin grants to edit", () => {
+    const permissions = parseMemberPermissions({
+      workspace: null,
+      bases: { [baseId]: "admin" },
+      tables: { [tableId]: { table: "admin", record: "admin" } }
+    });
+    expect(permissions.bases[baseId]).toBe("edit");
+    expect(permissions.tables[tableId]).toEqual({ table: "edit", record: "edit" });
   });
 
   it("rejects malformed resource identifiers and detects destructive grants", () => {

@@ -39,8 +39,9 @@ final class TableController
     public function update(NameRequest $request, string $tableId): JsonResponse
     {
         $scope = $this->permissions->table($request->user(), $tableId, 'table:update');
+        $previousName = DB::table('app.tables')->where('table_id', $tableId)->whereNull('deleted_at')->value('name');
         $row = $this->metadata->rename('tables', 'table_id', $tableId, (string) $request->string('name'), $request->user()->getKey());
-        $this->audit->write($request, $request->user(), $scope['workspaceId'], 'table.update', 'table', $tableId, ['name' => $row->name]);
+        $this->audit->write($request, $request->user(), $scope['workspaceId'], 'table.update', 'table', $tableId, ['name' => $row->name], ['Name' => ['before' => $previousName, 'after' => $row->name]]);
 
         return response()->json(['data' => $row]);
     }

@@ -36,6 +36,9 @@ export function useWorkspaceActions(options: WorkspaceActionsOptions) {
 
   async function createWorkspaceWithName(name: string) {
     const response = await mutate<{ data: Workspace }>("/api/workspaces", { name });
+    setSelectedBaseId(null);
+    setSelectedTableId(null);
+    clearWorkspaceData();
     setSelectedWorkspaceId(response.data.workspace_id);
     await loadWorkspaces();
   }
@@ -43,6 +46,9 @@ export function useWorkspaceActions(options: WorkspaceActionsOptions) {
   async function duplicateWorkspace(workspaceId: string) {
     try {
       const response = await mutate<{ data: { workspace_id: string; name: string } }>(`/api/workspaces/${workspaceId}/duplicate`, {});
+      setSelectedBaseId(null);
+      setSelectedTableId(null);
+      clearWorkspaceData();
       setSelectedWorkspaceId(response.data.workspace_id);
       await loadWorkspaces();
       setStatus({ tone: "success", text: `Workspace duplicated as "${response.data.name}"` });

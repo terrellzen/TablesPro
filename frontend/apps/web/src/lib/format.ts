@@ -41,6 +41,28 @@ export function fieldValueChanged(draftValue: string, storedValue: unknown, fiel
   return !Object.is(nextValue, currentValue);
 }
 
+export function auditObject(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  if (typeof value !== "string") return {};
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+export function auditValueForDisplay(value: unknown): string {
+  if (value === null || value === undefined) return "(not set)";
+  if (typeof value === "string" && value.trim() === "") return "(blank)";
+  if (Array.isArray(value) && value.length === 0) return "(no selections)";
+  if (Array.isArray(value)) return value.join(", ");
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong";
 }

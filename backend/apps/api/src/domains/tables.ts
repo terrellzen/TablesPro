@@ -106,6 +106,7 @@ export function registerTableRoutes(app: FastifyInstance): void {
       const { workspaceId } = await authorizeTable(actor, tableId, { resource: "table", action: "update" });
       const body = readBodyObject(request);
       const name = readRequiredString(body, "name");
+      const previousName = (await pool.query<{ name: string }>("SELECT name FROM app.tables WHERE table_id = $1 AND deleted_at IS NULL", [tableId])).rows[0]?.name;
       const result = await pool.query(
         `
           UPDATE app.tables
@@ -126,7 +127,8 @@ export function registerTableRoutes(app: FastifyInstance): void {
         entityId: tableId,
         requestId: request.id,
         outcome: "success",
-        metadata: { name }
+        metadata: { name },
+        diff: { Name: { before: previousName ?? null, after: name } }
       });
       return sendOk(result.rows[0]);
     } catch (error) {

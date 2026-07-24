@@ -15,12 +15,16 @@ export function registerAdminRoutes(app: FastifyInstance): void {
         pool.query<{ count: string }>(
           "SELECT count(*)::text AS count FROM information_schema.tables WHERE table_schema = 'app_data'"
         ),
-        pool.query<{ table_name: string; count: string }>(
+        pool.query<{ physical_name: string; table_name: string | null; base_name: string | null; workspace_name: string | null; count: string }>(
           `
-            SELECT relname AS table_name, n_live_tup AS count
-            FROM pg_stat_user_tables
-            WHERE schemaname = 'app_data'
-            ORDER BY n_live_tup DESC
+            SELECT stats.relname AS physical_name, tables.name AS table_name, bases.name AS base_name,
+                   workspaces.name AS workspace_name, stats.n_live_tup::text AS count
+            FROM pg_stat_user_tables stats
+            LEFT JOIN app.tables tables ON tables.physical_table_name::text = stats.relname
+            LEFT JOIN app.bases bases ON bases.base_id = tables.base_id
+            LEFT JOIN app.workspaces workspaces ON workspaces.workspace_id = bases.workspace_id
+            WHERE stats.schemaname = 'app_data'
+            ORDER BY stats.n_live_tup DESC
             LIMIT 20
           `
         )
@@ -31,9 +35,12 @@ export function registerAdminRoutes(app: FastifyInstance): void {
           name: databaseName.rows[0]?.name ?? "unknown",
           sizeBytes: Number(dbSize.rows[0]?.size_bytes ?? 0),
           tableCount: Number(tableCount.rows[0]?.count ?? 0),
-          tables: rowCounts.rows.map((r) => ({
-            name: r.table_name,
-            rowCount: Number(r.count)
+          tables: rowCounts.rows.map((row) => ({
+            physicalName: row.physical_name,
+            tableName: row.table_name ?? row.physical_name,
+            baseName: row.base_name,
+            workspaceName: row.workspace_name,
+            rowCount: Number(row.count)
           }))
         }
       };
@@ -89,9 +96,15 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       const workspaceId = readOptionalUuid(query, "workspaceId");
       const baseId = readOptionalUuid(query, "baseId");
       const tableId = readOptionalUuid(query, "tableId");
+      const scope = query.scope ?? "all";
+      if (scope !== "all" && scope !== "company" && scope !== "workspace") {
+        throw new HttpError(400, "VALIDATION_ERROR", "scope must be all, company, or workspace");
+      }
       const limit = readLimit(query, 100, 250);
   
       const conditions: string[] = [];
+      if (scope === "company") conditions.push("ae.workspace_id IS NULL");
+      if (scope === "workspace") conditions.push("ae.workspace_id IS NOT NULL");
       const params: unknown[] = [];
       if (workspaceId) {
         params.push(workspaceId);
@@ -112,14 +125,21 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       const result = await pool.query(
         `
           SELECT ae.event_id, ae.workspace_id, ae.actor_user_id, ae.action, ae.entity_type,
-                 ae.entity_id, ae.occurred_at, ae.outcome, ae.diff, ae.metadata,
-                 w.name AS workspace_name,
+                 ae.entity_id, ae.occurred_at, ae.request_id, ae.job_id, ae.outcome, ae.diff, ae.metadata,
+                 COALESCE(w.name, ae.metadata->>'workspaceName') AS workspace_name, b.base_id, b.name AS base_name, t.table_id, t.name AS table_name,
                  COALESCE(up.display_name, up.handle, ae.actor_user_id) AS actor_name,
-                 t.name AS table_name
+                 up.handle::text AS actor_handle
           FROM app.audit_events ae
-          JOIN app.workspaces w ON w.workspace_id = ae.workspace_id
+          LEFT JOIN app.workspaces w ON w.workspace_id = ae.workspace_id
           LEFT JOIN app.user_profiles up ON up.user_id = ae.actor_user_id
-          LEFT JOIN app.tables t ON t.table_id = (ae.metadata->>'tableId')::uuid
+          LEFT JOIN app.tables t ON t.table_id = COALESCE(
+            NULLIF(ae.metadata->>'tableId', '')::uuid,
+            CASE WHEN ae.entity_type = 'table' THEN ae.entity_id::uuid END
+          )
+          LEFT JOIN app.bases b ON b.base_id = COALESCE(
+            t.base_id,
+            CASE WHEN ae.entity_type = 'base' THEN ae.entity_id::uuid END
+          )
           WHERE 1=1 ${whereClause}
           ORDER BY ae.occurred_at DESC, ae.event_id DESC
           LIMIT $${params.length}

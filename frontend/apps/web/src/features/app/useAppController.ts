@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getConfiguredApiBaseUrl } from "../../lib/api.js";
 import { useThemePreference } from "../../lib/useThemePreference.js";
 import type {
@@ -62,9 +62,23 @@ export function useAppController() {
   });
 
   const selectedWorkspace = workspaces.find((workspace) => workspace.workspace_id === selectedWorkspaceId) ?? null;
-  const selectedBase = bases.find((base) => base.base_id === selectedBaseId) ?? null;
-  const selectedTable = tables.find((table) => table.table_id === selectedTableId) ?? null;
+  const workspaceBases = selectedWorkspaceId
+    ? bases.filter((base) => base.workspace_id === selectedWorkspaceId)
+    : [];
+  const selectedBase = workspaceBases.find((base) => base.base_id === selectedBaseId) ?? null;
+  const baseTables = selectedBase
+    ? tables.filter((table) => table.base_id === selectedBase.base_id)
+    : [];
+  const selectedTable = baseTables.find((table) => table.table_id === selectedTableId) ?? null;
   const visibleFields = fields.filter((field) => !field.hidden);
+
+  useEffect(() => {
+    if (selectedBaseId && !selectedBase) setSelectedBaseId(null);
+  }, [selectedBase, selectedBaseId]);
+
+  useEffect(() => {
+    if (selectedTableId && !selectedTable) setSelectedTableId(null);
+  }, [selectedTable, selectedTableId]);
 
   const searchedRecords = useMemo(() => {
     if (!searchValue.trim()) return records;
@@ -76,7 +90,8 @@ export function useAppController() {
 
   const {
     loadAppConfig, loadCurrentUser, loadWorkspaces, loadBases, loadTables,
-    loadAuditEvents, loadAdminAuditEvents, loadAdminWorkspaces, loadAdminData, refresh
+    loadAuditEvents, loadAdminAuditEvents, loadAdminWorkspaces, loadAdminData,
+    loadUsers, cancelHierarchyRequests, refresh
   } = useAppLoaders({
     profile, selectedWorkspaceId, selectedWorkspaceRole: selectedWorkspace?.role ?? null,
     selectedBaseId, selectedTableId, setAuthChecked,
@@ -91,11 +106,28 @@ export function useAppController() {
     selectedWorkspaceRole: selectedWorkspace?.role ?? null,
     selectedBaseId, selectedTableId, schemaTableId, activeViewId, views, fields, loadAppConfig,
     loadCurrentUser, loadWorkspaces, loadBases, loadTables, loadAuditEvents,
-    loadAdminWorkspaces, loadAdminData, reloadRecords, cancelRecordRequests,
-    setSchemaTableId, setBases, setTables, setFields, setRecords, setViews,
+    loadAdminWorkspaces, loadAdminData, loadUsers, reloadRecords, cancelRecordRequests,
+    setSchemaTableId, setSelectedTableId, setBases, setTables, setFields, setRecords, setViews,
     setActiveViewId, setAuditEvents, setMembers, setUsers, setSearchValue,
     setFilters, setSorts, setStatus
   });
+
+  function selectWorkspace(workspaceId: string) {
+    if (workspaceId === selectedWorkspaceId) return;
+    cancelHierarchyRequests();
+    setSelectedWorkspaceId(workspaceId);
+    setSelectedBaseId(null);
+    setSelectedTableId(null);
+    setBases([]);
+    setTables([]);
+    setFields([]);
+    setRecords([]);
+    setViews([]);
+    setSchemaTableId(null);
+    setActiveViewId(null);
+    setEditingCell(null);
+    cancelRecordRequests();
+  }
 
   function showAllRecords() {
     setActiveViewId(null);
@@ -106,7 +138,7 @@ export function useAppController() {
   }
 
   async function openWorkspaceMembers(workspaceId: string) {
-    setSelectedWorkspaceId(workspaceId);
+    selectWorkspace(workspaceId);
     try {
       await loadAdminData(workspaceId);
       setShowMembers(true);
@@ -206,11 +238,11 @@ export function useAppController() {
   return {
     themePreference, setThemePreference,
     authChecked, currentUser, apiServerUrl, signUpEnabled, profile, setProfile,
-    workspaces, bases, tables, fields, records, views, activeViewId, setActiveViewId,
+    workspaces, bases: workspaceBases, tables: baseTables, fields, records, views, activeViewId, setActiveViewId,
     auditEvents, adminWorkspaces, members, users,
     filters, setFilters, sorts, setSorts,
     searchValue, setSearchValue, showAdmin, setShowAdmin, showMembers, setShowMembers,
-    selectedWorkspaceId, setSelectedWorkspaceId, selectedBaseId, setSelectedBaseId,
+    selectedWorkspaceId, setSelectedWorkspaceId, selectWorkspace, selectedBaseId, setSelectedBaseId,
     selectedTableId, setSelectedTableId, editingCell, setEditingCell,
     draftValue, setDraftValue, status, loading,
     hasMore, loadingMore, loadingRows, loadMoreError,

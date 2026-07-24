@@ -12,14 +12,14 @@ export type AdminPanelProps = {
   currentUser: AuthUser;
   profile: UserProfile | null;
   users: UserProfile[];
-  auditEvents: AuditEvent[];
   adminWorkspaces: AdminWorkspace[];
   workspaces: Workspace[];
   onLoadAdminAuditEvents: (
+    scope: "all" | "company" | "workspace",
     workspaceId: string | null,
     baseId: string | null,
     tableId: string | null
-  ) => Promise<void>;
+  ) => Promise<AuditEvent[]>;
   onChangeUserPermissions: (
     user: UserProfile,
     patch: Partial<Pick<UserProfile, "can_create_workspaces" | "can_manage_users">>

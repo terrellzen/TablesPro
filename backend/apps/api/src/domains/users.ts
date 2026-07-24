@@ -6,6 +6,7 @@ import { auth } from "../auth/auth.js";
 import { requireActor } from "./authz.js";
 import { HttpError, mapError, readBodyObject, readRequiredString, sendOk } from "./http.js";
 import { assertUserIsNotFinalAdmin } from "./member-permission-store.js";
+import { writeUserAudit } from "./user-audit.js";
 
 export type UserProfile = {
   user_id: string;
@@ -72,6 +73,7 @@ export function registerUserRoutes(app: FastifyInstance): void {
         [result.user.id, handle, displayName, canCreateWorkspaces, canManageUsers]
       );
 
+      await writeUserAudit({ actorUserId: actor.userId, requestId: request.id, action: "user.create", target: { user_id: result.user.id, handle, display_name: displayName } });
       return sendOk({
         user_id: result.user.id,
         handle,
@@ -94,6 +96,7 @@ export function registerUserRoutes(app: FastifyInstance): void {
       const body = readBodyObject(request);
       const handle = normalizeHandle(readRequiredString(body, "handle"));
       const displayName = readRequiredString(body, "displayName");
+      const previousProfile = await readUserProfile(actor.userId);
 
       const taken = await pool.query<{ user_id: string }>(
         `SELECT user_id FROM app.user_profiles WHERE handle = $1::citext AND user_id != $2`,
@@ -118,6 +121,7 @@ export function registerUserRoutes(app: FastifyInstance): void {
         `,
         [actor.userId, handle, displayName, isFirstUser, isFirstUser]
       );
+      await writeUserAudit({ actorUserId: actor.userId, requestId: request.id, action: "user.update", target: result.rows[0]!, diff: { "Display name": { before: previousProfile?.display_name ?? null, after: displayName }, Handle: { before: previousProfile?.handle ?? null, after: handle } } });
       return sendOk(result.rows[0]);
     } catch (error) {
       return mapError(request, reply, error);
@@ -129,6 +133,7 @@ export function registerUserRoutes(app: FastifyInstance): void {
       const actor = await requireActor(request);
       await requireCanManageUsers(actor.userId);
       const targetUserId = readRequiredString(request.params as Record<string, unknown>, "userId");
+      const previousProfile = await readUserProfile(targetUserId);
       const body = readBodyObject(request);
       const canCreateWorkspaces = Boolean(body.canCreateWorkspaces);
       const canManageUsers = Boolean(body.canManageUsers);
@@ -146,6 +151,7 @@ export function registerUserRoutes(app: FastifyInstance): void {
       if (!result.rows[0]) {
         throw new HttpError(404, "NOT_FOUND", "User was not found");
       }
+      await writeUserAudit({ actorUserId: actor.userId, requestId: request.id, action: "user.update", target: result.rows[0]!, diff: { "Can create workspaces": { before: previousProfile?.can_create_workspaces ?? false, after: canCreateWorkspaces }, "Can manage users": { before: previousProfile?.can_manage_users ?? false, after: canManageUsers } } });
       return sendOk(result.rows[0]);
     } catch (error) {
       return mapError(request, reply, error);
@@ -158,6 +164,8 @@ export function registerUserRoutes(app: FastifyInstance): void {
       const actor = await requireActor(request);
       await requireCanManageUsers(actor.userId);
       const targetUserId = readRequiredString(request.params as Record<string, unknown>, "userId");
+      const targetProfile = await readUserProfile(targetUserId);
+      if (!targetProfile) throw new HttpError(404, "NOT_FOUND", "User was not found");
       if (targetUserId === actor.userId) {
         throw new HttpError(403, "FORBIDDEN", "Users cannot disable themselves");
       }
@@ -168,6 +176,7 @@ export function registerUserRoutes(app: FastifyInstance): void {
       ]);
       await client.query("DELETE FROM app.workspace_members WHERE user_id = $1", [targetUserId]);
       await client.query("COMMIT");
+      await writeUserAudit({ actorUserId: actor.userId, requestId: request.id, action: "user.disable", target: targetProfile });
       return reply.status(204).send();
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
@@ -179,6 +188,9 @@ export function registerUserRoutes(app: FastifyInstance): void {
 
   app.post("/api/me/change-password", async (request, reply) => {
     try {
+      const actor = await requireActor(request);
+      const targetProfile = await readUserProfile(actor.userId);
+      if (!targetProfile) throw new HttpError(404, "NOT_FOUND", "User profile was not found");
       const body = readBodyObject(request);
       const currentPassword = readRequiredString(body, "currentPassword");
       const newPassword = readRequiredString(body, "newPassword");
@@ -188,6 +200,7 @@ export function registerUserRoutes(app: FastifyInstance): void {
         headers: fromNodeHeaders(request.headers)
       });
 
+      await writeUserAudit({ actorUserId: actor.userId, requestId: request.id, action: "user.password_change", target: targetProfile });
       return sendOk({ status: true });
     } catch (error) {
       return mapError(request, reply, error);
@@ -199,6 +212,8 @@ export function registerUserRoutes(app: FastifyInstance): void {
       const actor = await requireActor(request);
       await requireCanManageUsers(actor.userId);
       const targetUserId = readRequiredString(request.params as Record<string, unknown>, "userId");
+      const targetProfile = await readUserProfile(targetUserId);
+      if (!targetProfile) throw new HttpError(404, "NOT_FOUND", "User was not found");
       const body = readBodyObject(request);
       const adminPassword = readRequiredString(body, "adminPassword");
       const newPassword = readRequiredString(body, "newPassword");
@@ -223,6 +238,7 @@ export function registerUserRoutes(app: FastifyInstance): void {
         [newHash, targetUserId]
       );
 
+      await writeUserAudit({ actorUserId: actor.userId, requestId: request.id, action: "user.password_reset", target: targetProfile });
       return sendOk({ status: true });
     } catch (error) {
       return mapError(request, reply, error);

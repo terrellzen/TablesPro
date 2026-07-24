@@ -112,17 +112,23 @@ export type SavedView = {
 
 export type AuditEvent = {
   event_id: string;
-  workspace_id: string;
-  workspace_name: string;
-  actor_user_id: string;
-  actor_name: string;
+  workspace_id: string | null;
+  workspace_name: string | null;
+  actor_user_id: string | null;
+  actor_name: string | null;
+  actor_handle: string | null;
   action: string;
   entity_type: string;
   entity_id: string;
+  request_id: string | null;
+  job_id: string | null;
   outcome: string;
   occurred_at: string;
   diff: Record<string, { before: unknown; after: unknown }>;
   metadata: Record<string, unknown>;
+  base_id: string | null;
+  base_name: string | null;
+  table_id: string | null;
   table_name: string | null;
 };
 

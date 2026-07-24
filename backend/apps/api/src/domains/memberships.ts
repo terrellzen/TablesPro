@@ -145,7 +145,7 @@ export function registerMembershipRoutes(app: FastifyInstance): void {
 function parseAndConfirmPermissions(body: Record<string, unknown>): MemberPermissions {
   const permissions = parseMemberPermissions(body.permissions);
   if (hasDestructiveAccess(permissions) && body.confirmDestructive !== true) {
-    throw new HttpError(400, "VALIDATION_ERROR", "Confirm destructive administrative permissions before saving");
+    throw new HttpError(400, "VALIDATION_ERROR", "Confirm destructive permissions before saving");
   }
   return permissions;
 }
@@ -165,8 +165,10 @@ async function auditPermissionChange(
   workspaceId: string, actorUserId: string, userId: string, requestId: string,
   action: string, permissions: MemberPermissions | null
 ) {
+  const target = await pool.query<{ display_name: string; handle: string }>("SELECT display_name, handle::text FROM app.user_profiles WHERE user_id = $1", [userId]);
+  const profile = target.rows[0];
   await writeAuditEvent({
     workspaceId, actorUserId, action, entityType: "workspace_member", entityId: userId,
-    requestId, outcome: "success", metadata: { permissions }
+    requestId, outcome: "success", metadata: { permissions, name: profile?.display_name, handle: profile?.handle, targetUserId: userId }
   });
 }

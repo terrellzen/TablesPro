@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { LogOut, UserRound } from "lucide-react";
 import { mutate } from "../../lib/api.js";
+import { notifyAuditChanged } from "../../lib/auditEvents.js";
 import { errorMessage } from "../../lib/format.js";
 import type { AuthUser, UserProfile } from "../../types/domain.js";
 
@@ -31,6 +32,7 @@ export function AccountBlock(props: {
         displayName: props.user.name || props.user.email || handleDraft
       }, "PUT");
       props.onProfileChange(response.data);
+      notifyAuditChanged();
       setAccountStatus("User id updated");
     } catch (error) {
       setAccountStatus(errorMessage(error));

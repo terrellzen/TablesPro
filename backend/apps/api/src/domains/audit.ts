@@ -1,7 +1,7 @@
 import { pool } from "../db/pool.js";
 
 export type AuditInput = {
-  workspaceId: string;
+  workspaceId: string | null;
   actorUserId: string;
   action: string;
   entityType: string;

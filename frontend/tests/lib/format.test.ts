@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { coerceFieldValue, fieldValueChanged, fieldValueForInput } from "../../apps/web/src/lib/format.js";
+import {
+  auditObject,
+  auditValueForDisplay,
+  coerceFieldValue,
+  fieldValueChanged,
+  fieldValueForInput
+} from "../../apps/web/src/lib/format.js";
 
 describe("fieldValueChanged", () => {
   it("does not mark an untouched text value as changed", () => {
@@ -49,5 +55,21 @@ describe("fieldValueChanged", () => {
   it("normalizes database dates for date inputs and no-op comparisons", () => {
     expect(fieldValueForInput("2026-07-22T00:00:00.000Z", "date")).toBe("2026-07-22");
     expect(fieldValueChanged("2026-07-22", "2026-07-22T00:00:00.000Z", "date")).toBe(false);
+  });
+});
+
+describe("audit value formatting", () => {
+  it("decodes JSON object strings without iterating over their characters", () => {
+    expect(auditObject('{"Status":{"before":"Open","after":"Done"}}')).toEqual({
+      Status: { before: "Open", after: "Done" }
+    });
+    expect(auditObject("not json")).toEqual({});
+  });
+
+  it("uses a consistent label for empty values", () => {
+    expect(auditValueForDisplay(null)).toBe("(not set)");
+    expect(auditValueForDisplay("")).toBe("(blank)");
+    expect(auditValueForDisplay("   ")).toBe("(blank)");
+    expect(auditValueForDisplay([])).toBe("(no selections)");
   });
 });

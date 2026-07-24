@@ -11,7 +11,7 @@ export function AppView({ controller }: { controller: AppController }) {
   const {
     themePreference, setThemePreference, authChecked, currentUser, apiServerUrl,
     signUpEnabled, profile, setProfile, workspaces, showAdmin, setShowAdmin,
-    selectedWorkspace, selectedWorkspaceId, setSelectedWorkspaceId, selectedBase,
+    selectedWorkspace, selectedWorkspaceId, selectWorkspace, selectedBase,
     selectedTable, status, loading, modalEntity, setModalEntity, modalValue,
     setModalValue, contextMenu, setContextMenu, createWorkspace, deleteWorkspace,
     duplicateWorkspace, openRenameModal, handleApiServerChange, handleAuthenticated,
@@ -60,7 +60,7 @@ export function AppView({ controller }: { controller: AppController }) {
         workspaces={workspaces}
         showAdmin={showAdmin}
         onShowAdminChange={setShowAdmin}
-        onWorkspaceChange={setSelectedWorkspaceId}
+        onWorkspaceChange={selectWorkspace}
         onCreateWorkspace={() => void createWorkspace()}
         onDeleteWorkspace={() => void deleteWorkspace()}
         onDuplicateWorkspace={(workspaceId) => void duplicateWorkspace(workspaceId)}
@@ -91,7 +91,6 @@ export function AppView({ controller }: { controller: AppController }) {
             currentUser={currentUser}
             profile={profile}
             users={controller.users}
-            auditEvents={controller.auditEvents}
             adminWorkspaces={controller.adminWorkspaces}
             workspaces={workspaces}
             onLoadAdminAuditEvents={controller.loadAdminAuditEvents}

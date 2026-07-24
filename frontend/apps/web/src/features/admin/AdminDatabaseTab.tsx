@@ -8,7 +8,7 @@ type DatabaseStats = {
     name: string;
     sizeBytes: number;
     tableCount: number;
-    tables: { name: string; rowCount: number }[];
+    tables: { physicalName: string; tableName: string; baseName: string | null; workspaceName: string | null; rowCount: number }[];
   };
 };
 
@@ -70,12 +70,19 @@ export function AdminDatabaseTab() {
           </div>
           <div className="db-table-list">
             <div className="db-table-row db-table-header">
-              <span>Table</span>
+              <span>Workspace → Base → Table</span>
               <span>Rows</span>
             </div>
             {stats.database.tables.map((table) => (
-              <div className="db-table-row" key={table.name}>
-                <span className="db-table-name">{table.name}</span>
+              <div className="db-table-row" key={table.physicalName}>
+                <div className="db-table-identity">
+                  <div className="db-table-path">
+                    {[table.workspaceName, table.baseName, table.tableName].filter(Boolean).map((part, index) => (
+                      <span key={`${part}:${index}`}>{index > 0 && <b aria-hidden="true">→</b>}<strong>{part}</strong></span>
+                    ))}
+                  </div>
+                  <details className="db-table-technical"><summary>Storage details</summary><code>{table.physicalName}</code></details>
+                </div>
                 <span>{table.rowCount.toLocaleString()}</span>
               </div>
             ))}

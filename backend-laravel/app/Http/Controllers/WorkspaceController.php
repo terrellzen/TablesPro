@@ -51,8 +51,9 @@ final class WorkspaceController
     public function update(NameRequest $request, string $workspaceId): JsonResponse
     {
         $this->permissions->workspace($request->user(), $workspaceId, 'workspace:update');
+        $previousName = DB::table('app.workspaces')->where('workspace_id', $workspaceId)->whereNull('deleted_at')->value('name');
         $row = $this->metadata->rename('workspaces', 'workspace_id', $workspaceId, (string) $request->string('name'), $request->user()->getKey());
-        $this->audit->write($request, $request->user(), $workspaceId, 'workspace.update', 'workspace', $workspaceId, ['name' => $row->name]);
+        $this->audit->write($request, $request->user(), $workspaceId, 'workspace.update', 'workspace', $workspaceId, ['name' => $row->name], ['Name' => ['before' => $previousName, 'after' => $row->name]]);
 
         return response()->json(['data' => $row]);
     }
@@ -60,8 +61,9 @@ final class WorkspaceController
     public function destroy(Request $request, string $workspaceId): JsonResponse
     {
         $this->permissions->workspace($request->user(), $workspaceId, 'workspace:delete');
+        $workspaceName = DB::table('app.workspaces')->where('workspace_id', $workspaceId)->value('name');
         $this->metadata->softDeleteWorkspace($workspaceId, $request->user()->getKey());
-        $this->audit->write($request, $request->user(), $workspaceId, 'workspace.delete', 'workspace', $workspaceId);
+        $this->audit->write($request, $request->user(), $workspaceId, 'workspace.delete', 'workspace', $workspaceId, ['name' => $workspaceName, 'workspaceName' => $workspaceName]);
 
         return response()->json(null, 204);
     }

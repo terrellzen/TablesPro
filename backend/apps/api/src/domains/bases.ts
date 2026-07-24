@@ -197,6 +197,7 @@ export function registerBaseRoutes(app: FastifyInstance): void {
       const workspaceId = await authorizeBase(actor, baseId, { resource: "base", action: "update" });
       const body = readBodyObject(request);
       const name = readRequiredString(body, "name");
+      const previousName = (await pool.query<{ name: string }>("SELECT name FROM app.bases WHERE base_id = $1 AND deleted_at IS NULL", [baseId])).rows[0]?.name;
       const result = await pool.query(
         `
           UPDATE app.bases
@@ -217,7 +218,8 @@ export function registerBaseRoutes(app: FastifyInstance): void {
         entityId: baseId,
         requestId: request.id,
         outcome: "success",
-        metadata: { name }
+        metadata: { name },
+        diff: { Name: { before: previousName ?? null, after: name } }
       });
       return sendOk(result.rows[0]);
     } catch (error) {

@@ -221,6 +221,7 @@ export function registerWorkspaceRoutes(app: FastifyInstance): void {
       await authorizeWorkspace(actor, workspaceId, { resource: "workspace", action: "update" });
       const body = readBodyObject(request);
       const name = readRequiredString(body, "name");
+      const previousName = (await pool.query<{ name: string }>("SELECT name FROM app.workspaces WHERE workspace_id = $1 AND deleted_at IS NULL", [workspaceId])).rows[0]?.name;
       const result = await pool.query(
         `
           UPDATE app.workspaces
@@ -241,7 +242,8 @@ export function registerWorkspaceRoutes(app: FastifyInstance): void {
         entityId: workspaceId,
         requestId: request.id,
         outcome: "success",
-        metadata: { name }
+        metadata: { name },
+        diff: { Name: { before: previousName ?? null, after: name } }
       });
       return sendOk(result.rows[0]);
     } catch (error) {
@@ -254,6 +256,7 @@ export function registerWorkspaceRoutes(app: FastifyInstance): void {
     try {
       const actor = await requireActor(request);
       const workspaceId = readUuidParam(request.params, "workspaceId");
+      const workspaceName = (await pool.query<{ name: string }>("SELECT name FROM app.workspaces WHERE workspace_id = $1", [workspaceId])).rows[0]?.name;
       await authorizeWorkspace(actor, workspaceId, { resource: "workspace", action: "delete" });
 
       await client.query("BEGIN");
@@ -279,7 +282,7 @@ export function registerWorkspaceRoutes(app: FastifyInstance): void {
         entityId: workspaceId,
         requestId: request.id,
         outcome: "success",
-        metadata: {}
+        metadata: { name: workspaceName, workspaceName }
       });
 
       return reply.status(204).send();

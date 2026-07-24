@@ -1,6 +1,7 @@
 import {
   mutate, request, setConfiguredApiBaseUrl, validateApiBaseUrl
 } from "../../../lib/api.js";
+import { notifyAuditChanged } from "../../../lib/auditEvents.js";
 import { errorMessage } from "../../../lib/format.js";
 import type {
   AppTable, AuditEvent, AuthUser, Base, Field, RecordRow, SavedView, UserProfile,
@@ -76,6 +77,7 @@ export function useSessionActions(options: SessionActionsOptions) {
   async function changeMyPassword(currentPassword: string, newPassword: string): Promise<boolean> {
     try {
       await mutate("/api/me/change-password", { currentPassword, newPassword });
+      notifyAuditChanged();
       setStatus({ tone: "success", text: "Password changed" });
       return true;
     } catch (error) {

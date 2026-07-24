@@ -37,12 +37,13 @@ final class FieldController
     public function update(NameRequest $request, string $tableId, string $fieldId): JsonResponse
     {
         $scope = $this->permissions->table($request->user(), $tableId, 'field:update');
+        $previousName = DB::table('app.fields')->where('field_id', $fieldId)->where('table_id', $tableId)->whereNull('tombstoned_at')->value('name');
         DB::table('app.fields')->where('field_id', $fieldId)->where('table_id', $tableId)->whereNull('tombstoned_at')->update([
             'name' => (string) $request->string('name'), 'updated_at' => now(), 'updated_by' => $request->user()->getKey(), 'row_version' => DB::raw('row_version + 1'),
         ]);
         $row = DB::table('app.fields')->where('field_id', $fieldId)->where('table_id', $tableId)->whereNull('tombstoned_at')->first();
         if (! $row) throw ApiException::notFound('Field was not found');
-        $this->audit->write($request, $request->user(), $scope['workspaceId'], 'field.update', 'field', $fieldId, ['tableId' => $tableId, 'name' => $row->name]);
+        $this->audit->write($request, $request->user(), $scope['workspaceId'], 'field.update', 'field', $fieldId, ['tableId' => $tableId, 'name' => $row->name], ['Name' => ['before' => $previousName, 'after' => $row->name]]);
 
         return response()->json(['data' => $row]);
     }

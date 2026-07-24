@@ -39,7 +39,7 @@ export function PermissionEditor(props: {
           <PermissionControl
             key={base.base_id}
             label={base.name}
-            description="Read, edit, or administer this base."
+            description="Read views this base; Edit can change or delete its content and structure."
             inherited={inheritedBaseAccess(permissions)}
             direct={permissions.bases[base.base_id] ?? null}
             onChange={(level) => props.onChange(setBaseAccess(permissions, base.base_id, level))}
@@ -52,7 +52,7 @@ export function PermissionEditor(props: {
           <PermissionControl
             key={table.table_id}
             label={resourceName(table, props.bases)}
-            description="Edit includes fields, views, and records; Admin also allows table deletion."
+            description="Edit includes fields, views, records, and table deletion."
             inherited={inheritedTableAccess(permissions, table.base_id)}
             direct={permissions.tables[table.table_id]?.table ?? null}
             onChange={(level) => props.onChange(setTableAccess(permissions, table.table_id, "table", level))}
@@ -65,7 +65,7 @@ export function PermissionEditor(props: {
           <PermissionControl
             key={table.table_id}
             label={resourceName(table, props.bases)}
-            description="Edit adds and updates records; Admin also allows record deletion."
+            description="Edit can add, update, and delete records."
             inherited={inheritedRecordAccess(permissions, table.base_id, table.table_id)}
             direct={permissions.tables[table.table_id]?.record ?? null}
             onChange={(level) => props.onChange(setTableAccess(permissions, table.table_id, "record", level))}

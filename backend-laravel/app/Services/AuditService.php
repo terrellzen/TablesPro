@@ -8,10 +8,21 @@ use Illuminate\Support\Facades\DB;
 
 final class AuditService
 {
+    public static function forResponse(object $row): object
+    {
+        foreach (["diff", "metadata"] as $column) {
+            if (isset($row->{$column}) && is_string($row->{$column})) {
+                $row->{$column} = json_decode($row->{$column}, true, flags: JSON_THROW_ON_ERROR);
+            }
+        }
+
+        return $row;
+    }
+
     public function write(
         Request $request,
         User $actor,
-        string $workspaceId,
+        ?string $workspaceId,
         string $action,
         string $entityType,
         string $entityId,

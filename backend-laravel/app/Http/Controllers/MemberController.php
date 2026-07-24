@@ -35,8 +35,9 @@ final class MemberController
         $input = $request->validate(['userId' => ['required', 'string'], 'permissions' => ['required', 'array'], 'confirmDestructive' => ['sometimes', 'boolean']]);
         $userId = $this->members->resolveUser($input['userId']);
         $permissions = $this->members->validatePermissions($workspaceId, $input['permissions'], $input['confirmDestructive'] ?? false);
+        $profile = DB::table('app.user_profiles')->where('user_id', $userId)->first();
         $member = $this->members->save($workspaceId, $userId, $permissions, $request->user()->getKey());
-        $this->audit->write($request, $request->user(), $workspaceId, 'member.create', 'workspace_member', $userId, ['permissions' => $permissions]);
+        $this->audit->write($request, $request->user(), $workspaceId, 'member.create', 'workspace_member', $userId, ['permissions' => $permissions, 'name' => $profile?->display_name, 'handle' => $profile?->handle, 'targetUserId' => $userId]);
         return response()->json(['data' => $member], 201);
     }
 
@@ -47,7 +48,8 @@ final class MemberController
         $input = $request->validate(['permissions' => ['required', 'array'], 'confirmDestructive' => ['sometimes', 'boolean']]);
         $permissions = $this->members->validatePermissions($workspaceId, $input['permissions'], $input['confirmDestructive'] ?? false);
         $member = $this->members->save($workspaceId, $userId, $permissions, $request->user()->getKey());
-        $this->audit->write($request, $request->user(), $workspaceId, 'member.update', 'workspace_member', $userId, ['permissions' => $permissions]);
+        $profile = DB::table('app.user_profiles')->where('user_id', $userId)->first();
+        $this->audit->write($request, $request->user(), $workspaceId, 'member.update', 'workspace_member', $userId, ['permissions' => $permissions, 'name' => $profile?->display_name, 'handle' => $profile?->handle, 'targetUserId' => $userId]);
         return response()->json(['data' => $member]);
     }
 
@@ -56,7 +58,8 @@ final class MemberController
         $this->permissions->workspace($request->user(), $workspaceId, 'member:delete');
         if ($userId === $request->user()->getKey()) throw ApiException::forbidden('Members cannot remove themselves');
         $this->members->remove($workspaceId, $userId);
-        $this->audit->write($request, $request->user(), $workspaceId, 'member.delete', 'workspace_member', $userId, ['permissions' => null]);
+        $profile = DB::table('app.user_profiles')->where('user_id', $userId)->first();
+        $this->audit->write($request, $request->user(), $workspaceId, 'member.delete', 'workspace_member', $userId, ['permissions' => null, 'name' => $profile?->display_name, 'handle' => $profile?->handle, 'targetUserId' => $userId]);
         return response()->json(null, 204);
     }
 }

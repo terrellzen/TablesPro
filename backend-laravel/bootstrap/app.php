@@ -15,6 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withCommands()
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
+        $middleware->redirectGuestsTo(fn () => null);
         $middleware->validateCsrfTokens(except: ['api/*']);
         $middleware->api(append: [App\Http\Middleware\EnsureTrustedOrigin::class]);
         $middleware->append(AddSecurityHeaders::class);
