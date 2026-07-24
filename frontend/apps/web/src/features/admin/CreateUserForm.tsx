@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { UserPlus } from "lucide-react";
-import type { CreateUserInput, UserProfile } from "../../types/domain.js";
+import { ASSIGNABLE_GLOBAL_ROLES, GLOBAL_ROLE_LABELS, type CreateUserInput, type GlobalRole, type UserProfile } from "../../types/domain.js";
 
 export function CreateUserForm(props: {
   onCreateUser: (fields: CreateUserInput) => Promise<UserProfile | undefined>;
@@ -9,8 +9,7 @@ export function CreateUserForm(props: {
   const [password, setPassword] = useState("");
   const [handle, setHandle] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [canCreateWorkspaces, setCanCreateWorkspaces] = useState(false);
-  const [canManageUsers, setCanManageUsers] = useState(false);
+  const [role, setRole] = useState<GlobalRole>("member");
   const [submitting, setSubmitting] = useState(false);
 
   async function submit(event: FormEvent) {
@@ -21,8 +20,7 @@ export function CreateUserForm(props: {
       password,
       handle: handle.trim() || email.trim().split("@")[0] || "",
       displayName: displayName.trim() || email.trim().split("@")[0] || "",
-      canCreateWorkspaces,
-      canManageUsers
+      role
     });
     setSubmitting(false);
     if (result) {
@@ -30,8 +28,7 @@ export function CreateUserForm(props: {
       setPassword("");
       setHandle("");
       setDisplayName("");
-      setCanCreateWorkspaces(false);
-      setCanManageUsers(false);
+      setRole("member");
     }
   }
 
@@ -53,16 +50,14 @@ export function CreateUserForm(props: {
         <span>Display name</span>
         <input value={displayName} placeholder={email.trim().split("@")[0] || "auto from email"} onChange={(event) => setDisplayName(event.target.value)} />
       </label>
-      <div className="inline-form">
-        <label>
-          <input type="checkbox" checked={canCreateWorkspaces} onChange={(event) => setCanCreateWorkspaces(event.target.checked)} />
-          Create workspaces
-        </label>
-        <label>
-          <input type="checkbox" checked={canManageUsers} onChange={(event) => setCanManageUsers(event.target.checked)} />
-          Manage users
-        </label>
-      </div>
+      <label className="stacked-field">
+        <span>Role</span>
+        <select value={role} onChange={(event) => setRole(event.target.value as GlobalRole)}>
+          {ASSIGNABLE_GLOBAL_ROLES.map((r) => (
+            <option key={r} value={r}>{GLOBAL_ROLE_LABELS[r]}</option>
+          ))}
+        </select>
+      </label>
       <button type="submit" className="small-button" disabled={submitting || !email.trim() || !password}>
         <UserPlus size={15} />
         {submitting ? "Creating" : "Create account"}

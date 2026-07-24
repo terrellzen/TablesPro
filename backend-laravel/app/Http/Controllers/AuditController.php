@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Services\AuditService;
 use App\Services\Authorization\PermissionService;
-use App\Support\AuditEventSerializer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,16 +16,6 @@ final class AuditController
     {
         $this->permissions->workspace($request->user(), $workspaceId, 'audit:read');
         $limit = min(max($request->integer('limit', 100), 1), 250);
-<<<<<<< HEAD
-        $rows = DB::table('app.audit_events')->where('workspace_id', $workspaceId)->orderByDesc('occurred_at')->orderByDesc('event_id')->limit($limit)->get([
-            'event_id', 'workspace_id', 'actor_user_id', 'action', 'entity_type', 'entity_id', 'occurred_at', 'request_id', 'job_id', 'outcome', 'diff', 'metadata',
-        ]);
-
-        return response()->json([
-            'data' => $rows->map(fn (object $row): array => AuditEventSerializer::fromRow($row)),
-            'page' => ['nextCursor' => null, 'previousCursor' => null, 'hasMore' => $rows->count() === $limit, 'requestedLimit' => $limit],
-        ]);
-=======
         $rows = DB::table('app.audit_events as ae')
             ->join('app.workspaces as w', 'w.workspace_id', '=', 'ae.workspace_id')
             ->leftJoin('app.user_profiles as up', 'up.user_id', '=', 'ae.actor_user_id')
@@ -36,6 +25,5 @@ final class AuditController
             ->orderByDesc('ae.occurred_at')->orderByDesc('ae.event_id')->limit($limit)
             ->get(['ae.*', 'w.name as workspace_name', 'b.base_id', 'b.name as base_name', 't.table_id', 't.name as table_name', DB::raw('COALESCE(up.display_name, up.handle::text, ae.actor_user_id) AS actor_name'), DB::raw('up.handle::text AS actor_handle')])->map(fn (object $row): object => AuditService::forResponse($row));
         return response()->json(['data' => $rows, 'page' => ['nextCursor' => null, 'previousCursor' => null, 'hasMore' => $rows->count() === $limit, 'requestedLimit' => $limit]]);
->>>>>>> 4798e6e (Audit Logs Fixed and Permission Bugs, and Data Bugs)
     }
 }

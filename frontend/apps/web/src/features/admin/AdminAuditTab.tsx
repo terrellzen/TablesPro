@@ -22,7 +22,7 @@ export function AdminAuditTab(props: AuditTabProps) {
   const [adminTables, setAdminTables] = useState<AdminTable[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
-  const isAdmin = Boolean(props.profile?.can_manage_users);
+  const isAdmin = props.profile?.role === "owner" || props.profile?.role === "admin";
   const workspaces = isAdmin ? props.adminWorkspaces : props.workspaces;
   useEffect(() => onAuditChanged(() => setRefreshToken((current) => current + 1)), []);
 

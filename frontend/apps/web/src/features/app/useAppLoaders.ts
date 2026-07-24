@@ -119,7 +119,7 @@ export function useAppLoaders(options: AppLoadersOptions) {
   }, []);
 
   const loadUsers = useCallback(async () => {
-    if (!options.profile?.can_manage_users) return;
+    if (options.profile?.role !== "owner" && options.profile?.role !== "admin") return;
     const response = await api<PageEnvelope<UserProfile>>("/api/users");
     options.setUsers(response.data);
   }, [options.profile]);
@@ -132,7 +132,7 @@ export function useAppLoaders(options: AppLoadersOptions) {
   const loadAdminData = useCallback(async (workspaceId: string) => {
     const memberResponse = await api<PageEnvelope<WorkspaceMember>>(`/api/workspaces/${workspaceId}/members`);
     options.setMembers(memberResponse.data);
-    if (options.profile?.can_manage_users) {
+    if (options.profile?.role === "owner" || options.profile?.role === "admin") {
       const userResponse = await api<PageEnvelope<UserProfile>>("/api/users");
       options.setUsers(userResponse.data);
     }
@@ -142,7 +142,7 @@ export function useAppLoaders(options: AppLoadersOptions) {
     options.setLoading(true);
     try {
       await loadWorkspaces();
-      if (options.profile?.can_manage_users) void loadAdminWorkspaces().catch(() => {});
+      if (options.profile?.role === "owner" || options.profile?.role === "admin") void loadAdminWorkspaces().catch(() => {});
       if (options.selectedWorkspaceId) {
         const tasks = [loadBases(options.selectedWorkspaceId), loadAuditEvents(options.selectedWorkspaceId)];
         if (options.selectedWorkspaceRole === "admin") tasks.push(loadAdminData(options.selectedWorkspaceId));

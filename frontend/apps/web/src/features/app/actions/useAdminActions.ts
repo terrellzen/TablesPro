@@ -1,7 +1,7 @@
 import { mutate, request } from "../../../lib/api.js";
 import { errorMessage } from "../../../lib/format.js";
 import { notifyAuditChanged } from "../../../lib/auditEvents.js";
-import type { CreateUserInput, MemberPermissions, UserProfile, WorkspaceMember } from "../../../types/domain.js";
+import type { CreateUserInput, GlobalRole, MemberPermissions, UserProfile, WorkspaceMember } from "../../../types/domain.js";
 import type { AsyncLoader, StateSetter, StatusSetter } from "./actionTypes.js";
 
 type AdminActionsOptions = {
@@ -52,18 +52,15 @@ export function useAdminActions(options: AdminActionsOptions) {
     }
   }
 
-  async function changeUserPermissions(
+  async function changeUserRole(
     user: UserProfile,
-    patch: Partial<Pick<UserProfile, "can_create_workspaces" | "can_manage_users">>
+    role: GlobalRole
   ) {
     try {
-      const response = await mutate<{ data: UserProfile }>(`/api/users/${encodeURIComponent(user.user_id)}/permissions`, {
-        canCreateWorkspaces: patch.can_create_workspaces ?? user.can_create_workspaces,
-        canManageUsers: patch.can_manage_users ?? user.can_manage_users
-      }, "PATCH");
+      const response = await mutate<{ data: UserProfile }>(`/api/users/${encodeURIComponent(user.user_id)}/role`, { role }, "PATCH");
       setUsers((current) => current.map((entry) => entry.user_id === user.user_id ? response.data : entry));
       notifyAuditChanged();
-      setStatus({ tone: "success", text: "User permissions updated" });
+      setStatus({ tone: "success", text: "User role updated" });
     } catch (error) {
       setStatus({ tone: "danger", text: errorMessage(error) });
     }
@@ -107,7 +104,7 @@ export function useAdminActions(options: AdminActionsOptions) {
   }
 
   return {
-    saveMemberPermissions, removeMember, changeUserPermissions,
+    saveMemberPermissions, removeMember, changeUserRole,
     removeUser, createUser, changeUserPassword
   };
 }

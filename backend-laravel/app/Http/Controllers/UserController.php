@@ -16,16 +16,23 @@ final class UserController
 
     public function index(Request $request): JsonResponse
     {
-        $profiles = DB::table('app.user_profiles')->whereNull('disabled_at')->orderBy('handle')->get(['user_id', DB::raw('handle::text'), 'display_name', 'can_create_workspaces', 'can_manage_users', 'disabled_at']);
+        $this->users->assertCanManageUsers($request->user());
+        $profiles = DB::table('app.user_profiles')->whereNull('disabled_at')->orderBy('handle')->get(['user_id', DB::raw('handle::text'), 'display_name', 'role', 'disabled_at']);
 
         return response()->json(['data' => UserProfileResource::collection($profiles)->resolve()]);
     }
 
     public function store(Request $request): JsonResponse
     {
-        $this->users->assertManager($request->user());
-        $input = $request->validate(['email' => ['required', 'email', 'max:320'], 'password' => ['required', 'string', 'min:8'], 'handle' => ['required', 'string'], 'displayName' => ['required', 'string', 'max:255'], 'canCreateWorkspaces' => ['sometimes', 'boolean'], 'canManageUsers' => ['sometimes', 'boolean']]);
-        $target = $this->users->create($input);
+        $this->users->assertCanManageUsers($request->user());
+        $input = $request->validate([
+            'email' => ['required', 'email', 'max:320'],
+            'password' => ['required', 'string', 'min:8'],
+            'handle' => ['required', 'string'],
+            'displayName' => ['required', 'string', 'max:255'],
+            'role' => ['sometimes', 'string', 'in:admin,creator,member'],
+        ]);
+        $target = $this->users->create($input, $request->user());
         $this->auditUser($request, 'user.create', $target);
         return response()->json(['data' => $target]);
     }
@@ -39,19 +46,19 @@ final class UserController
         return response()->json(['data' => $target]);
     }
 
-    public function permissions(Request $request, string $userId): JsonResponse
+    public function changeRole(Request $request, string $userId): JsonResponse
     {
-        $this->users->assertManager($request->user());
+        $this->users->assertCanManageUsers($request->user());
         $before = DB::table('app.user_profiles')->where('user_id', $userId)->first();
-        $input = $request->validate(['canCreateWorkspaces' => ['sometimes', 'boolean'], 'canManageUsers' => ['sometimes', 'boolean']]);
-        $target = $this->users->permissions($userId, $input['canCreateWorkspaces'] ?? false, $input['canManageUsers'] ?? false);
-        $this->auditUser($request, 'user.update', $target, ['Can create workspaces' => ['before' => $before?->can_create_workspaces, 'after' => $target->can_create_workspaces], 'Can manage users' => ['before' => $before?->can_manage_users, 'after' => $target->can_manage_users]]);
+        $input = $request->validate(['role' => ['required', 'string', 'in:admin,creator,member']]);
+        $target = $this->users->changeRole($request->user(), $userId, $input['role']);
+        $this->auditUser($request, 'user.role_change', $target, ['Role' => ['before' => $before?->role, 'after' => $target->role]]);
         return response()->json(['data' => $target]);
     }
 
     public function destroy(Request $request, string $userId): JsonResponse
     {
-        $this->users->assertManager($request->user());
+        $this->users->assertCanManageUsers($request->user());
         $target = DB::table('app.user_profiles')->where('user_id', $userId)->first();
         $this->users->disable($request->user(), $userId);
         if ($target) $this->auditUser($request, 'user.disable', $target);
@@ -69,13 +76,16 @@ final class UserController
 
     public function resetPassword(Request $request, string $userId): JsonResponse
     {
-        $this->users->assertManager($request->user());
+        $this->users->assertCanManageUsers($request->user());
         $target = DB::table('app.user_profiles')->where('user_id', $userId)->first();
         $input = $request->validate(['adminPassword' => ['required', 'string'], 'newPassword' => ['required', 'string', 'min:8']]);
         $this->users->resetPassword($request->user(), $userId, $input['adminPassword'], $input['newPassword']);
         if ($target) $this->auditUser($request, 'user.password_reset', $target);
         return response()->json(['data' => ['status' => true]]);
     }
-    private function auditUser(Request $request, string $action, object $target, array $diff = []): void { $this->audit->write($request, $request->user(), null, $action, 'user', $target->user_id, ['name' => $target->display_name, 'handle' => (string) $target->handle, 'targetUserId' => $target->user_id], $diff); }
 
+    private function auditUser(Request $request, string $action, object $target, array $diff = []): void
+    {
+        $this->audit->write($request, $request->user(), null, $action, 'user', $target->user_id, ['name' => $target->display_name, 'handle' => (string) $target->handle, 'targetUserId' => $target->user_id], $diff);
+    }
 }

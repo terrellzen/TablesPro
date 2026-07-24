@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from "react";
 import { KeyRound, ShieldCheck, Trash2, Users } from "lucide-react";
+import { ASSIGNABLE_GLOBAL_ROLES, GLOBAL_ROLE_LABELS, type GlobalRole } from "../../types/domain.js";
 import { CreateUserForm } from "./CreateUserForm.js";
 import type { AdminPanelProps } from "./AdminPanel.js";
 
 type UsersTabProps = Pick<
   AdminPanelProps,
-  "currentUser" | "profile" | "users" | "onChangeUserPermissions" |
+  "currentUser" | "profile" | "users" | "onChangeUserRole" |
   "onRemoveUser" | "onCreateUser" | "onChangeUserPassword"
 >;
 
@@ -15,6 +16,9 @@ export function AdminUsersTab(props: UsersTabProps) {
   const [newPassword, setNewPassword] = useState("");
   const [passwordStatus, setPasswordStatus] = useState("");
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
+
+  const isOwner = props.profile?.role === "owner";
+  const isAdmin = isOwner || props.profile?.role === "admin";
 
   function closePasswordForm() {
     setPasswordUserId(null);
@@ -32,6 +36,20 @@ export function AdminUsersTab(props: UsersTabProps) {
     setPasswordSubmitting(false);
     if (ok) closePasswordForm();
     else setPasswordStatus("Failed — check your password");
+  }
+
+  function availableRoles(targetRole: GlobalRole): GlobalRole[] {
+    if (isOwner) return ASSIGNABLE_GLOBAL_ROLES;
+    if (isAdmin) return ["creator", "member"];
+    return [];
+  }
+
+  function canModifyUser(target: { user_id: string; role: GlobalRole }): boolean {
+    if (!isAdmin) return false;
+    if (target.user_id === props.currentUser.id) return false;
+    if (isOwner) return true;
+    if (target.role === "owner" || target.role === "admin") return false;
+    return true;
   }
 
   return (
@@ -69,56 +87,60 @@ export function AdminUsersTab(props: UsersTabProps) {
           <span className="badge">{props.users.length}</span>
         </div>
         <div className="user-directory">
-          {props.users.map((user) => (
-            <div className="user-row" key={user.user_id}>
-              <div className="user-info">
-                <strong>{user.display_name}</strong>
-                <span>@{user.handle}</span>
-                {user.user_id === props.currentUser.id && <span className="badge">You</span>}
+          {props.users.map((user) => {
+            const modifiable = canModifyUser(user);
+            const roles = availableRoles(user.role);
+            return (
+              <div className="user-row" key={user.user_id}>
+                <div className="user-info">
+                  <strong>{user.display_name}</strong>
+                  <span>@{user.handle}</span>
+                  <span className="badge">{GLOBAL_ROLE_LABELS[user.role]}</span>
+                  {user.user_id === props.currentUser.id && <span className="badge">You</span>}
+                </div>
+                <div className="user-actions">
+                  {roles.length > 0 ? (
+                    <select
+                      className="role-select"
+                      value={user.role}
+                      disabled={!modifiable}
+                      onChange={(event) => void props.onChangeUserRole(user, event.target.value as GlobalRole)}
+                    >
+                      {roles.map((role) => (
+                        <option key={role} value={role}>{GLOBAL_ROLE_LABELS[role]}</option>
+                      ))}
+                      {!roles.includes(user.role) && (
+                        <option value={user.role} disabled>{GLOBAL_ROLE_LABELS[user.role]}</option>
+                      )}
+                    </select>
+                  ) : (
+                    <span className="role-badge">{GLOBAL_ROLE_LABELS[user.role]}</span>
+                  )}
+                  <button
+                    type="button"
+                    className="icon-button"
+                    disabled={!isAdmin}
+                    onClick={() => {
+                      closePasswordForm();
+                      setPasswordUserId(user.user_id);
+                    }}
+                    aria-label={`Change password for ${user.handle}`}
+                  >
+                    <KeyRound size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button danger"
+                    disabled={!canModifyUser(user)}
+                    onClick={() => void props.onRemoveUser(user)}
+                    aria-label={`Disable ${user.handle}`}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
               </div>
-              <div className="user-actions">
-                <label className="user-perm">
-                  <input
-                    type="checkbox"
-                    checked={user.can_create_workspaces}
-                    disabled={!props.profile?.can_manage_users || user.user_id === props.currentUser.id}
-                    onChange={(event) => void props.onChangeUserPermissions(user, { can_create_workspaces: event.target.checked })}
-                  />
-                  Create
-                </label>
-                <label className="user-perm">
-                  <input
-                    type="checkbox"
-                    checked={user.can_manage_users}
-                    disabled={!props.profile?.can_manage_users || user.user_id === props.currentUser.id}
-                    onChange={(event) => void props.onChangeUserPermissions(user, { can_manage_users: event.target.checked })}
-                  />
-                  Manage
-                </label>
-                <button
-                  type="button"
-                  className="icon-button"
-                  disabled={!props.profile?.can_manage_users}
-                  onClick={() => {
-                    closePasswordForm();
-                    setPasswordUserId(user.user_id);
-                  }}
-                  aria-label={`Change password for ${user.handle}`}
-                >
-                  <KeyRound size={15} />
-                </button>
-                <button
-                  type="button"
-                  className="icon-button danger"
-                  disabled={!props.profile?.can_manage_users || user.user_id === props.currentUser.id}
-                  onClick={() => void props.onRemoveUser(user)}
-                  aria-label={`Disable ${user.handle}`}
-                >
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

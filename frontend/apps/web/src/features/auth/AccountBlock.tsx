@@ -66,7 +66,7 @@ export function AccountBlock(props: {
         <UserRound size={16} />
         <div>
           <strong>{props.profile?.handle ? `@${props.profile.handle}` : props.user.name || props.user.email || "Signed in"}</strong>
-          <span>{props.profile?.can_create_workspaces ? "Can create" : "Shared access only"}</span>
+          <span>{props.profile?.role === "member" ? "Shared access only" : props.profile?.role === "owner" ? "Owner" : "Can create"}</span>
         </div>
         <button type="button" className="icon-button" onClick={() => void props.onLogout()} aria-label="Sign out">
           <LogOut size={16} />

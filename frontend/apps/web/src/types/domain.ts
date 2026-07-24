@@ -170,24 +170,33 @@ export type PageEnvelope<T> = {
 
 export type Status = { tone: "idle" | "success" | "danger"; text: string };
 
+export type GlobalRole = "owner" | "admin" | "creator" | "member";
+
 export type AuthUser = { id: string; name?: string | null; email?: string | null };
 
 export type UserProfile = {
   user_id: string;
   handle: string;
   display_name: string;
-  can_create_workspaces: boolean;
-  can_manage_users: boolean;
+  role: GlobalRole;
   disabled_at: string | null;
 };
+
+export const GLOBAL_ROLE_LABELS: Record<GlobalRole, string> = {
+  owner: "Owner",
+  admin: "Admin",
+  creator: "Creator",
+  member: "Member",
+};
+
+export const ASSIGNABLE_GLOBAL_ROLES: GlobalRole[] = ["admin", "creator", "member"];
 
 export type CreateUserInput = {
   email: string;
   password: string;
   handle: string;
   displayName: string;
-  canCreateWorkspaces: boolean;
-  canManageUsers: boolean;
+  role: GlobalRole;
 };
 
 export type AuthEnvelope = { user?: AuthUser; profile?: UserProfile | null };

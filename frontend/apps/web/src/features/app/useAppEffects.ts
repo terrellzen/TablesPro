@@ -61,11 +61,11 @@ export function useAppEffects(options: AppEffectsOptions) {
   }, [options.currentUser, options.loadWorkspaces]);
 
   useEffect(() => {
-    if (options.profile?.can_manage_users) void options.loadAdminWorkspaces().catch(() => {});
+    if (options.profile?.role === "owner" || options.profile?.role === "admin") void options.loadAdminWorkspaces().catch(() => {});
   }, [options.profile, options.loadAdminWorkspaces]);
 
   useEffect(() => {
-    if (options.profile?.can_manage_users) void options.loadUsers().catch(() => {});
+    if (options.profile?.role === "owner" || options.profile?.role === "admin") void options.loadUsers().catch(() => {});
   }, [options.profile, options.loadUsers]);
 
   useEffect(() => {

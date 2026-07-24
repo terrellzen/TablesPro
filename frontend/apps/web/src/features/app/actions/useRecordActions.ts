@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { mutate, request } from "../../../lib/api.js";
 import { coerceFieldValue, errorMessage, fieldValueChanged } from "../../../lib/format.js";
 import type { Field, RecordRow } from "../../../types/domain.js";
@@ -20,6 +21,8 @@ export function useRecordActions(options: RecordActionsOptions) {
     selectedWorkspaceId, selectedTableId, visibleFields, draftValue,
     setEditingCell, setRecords, reloadRecords, loadAuditEvents, setStatus
   } = options;
+
+  const saveQueueRef = useRef(new Map<string, Promise<RecordRow | null>>());
 
   async function addRecord() {
     if (!selectedTableId || visibleFields.length === 0 || !selectedWorkspaceId) return;
@@ -45,7 +48,7 @@ export function useRecordActions(options: RecordActionsOptions) {
     }
   }
 
-  async function saveCell(record: RecordRow, field: Field) {
+  function saveCell(record: RecordRow, field: Field) {
     if (!selectedTableId || !selectedWorkspaceId) return;
     const storedValue = record[field.physical_column_name];
     let nextValue: unknown;
@@ -64,18 +67,28 @@ export function useRecordActions(options: RecordActionsOptions) {
     setRecords((current) => current.map((row) =>
       row.record_id === record.record_id ? { ...row, [field.physical_column_name]: nextValue } : row
     ));
-    try {
-      const response = await mutate<{ data: RecordRow }>(`/api/tables/${selectedTableId}/records/${record.record_id}`, {
-        rowVersion: Number(record.row_version),
+
+    const previous = saveQueueRef.current.get(record.record_id) ?? Promise.resolve(null);
+    const queued = previous.then((latestRecord) => {
+      const baseRecord = latestRecord ?? record;
+      return mutate<{ data: RecordRow }>(`/api/tables/${selectedTableId}/records/${baseRecord.record_id}`, {
+        rowVersion: Number(baseRecord.row_version),
         values: { [field.field_id]: nextValue }
-      }, "PATCH");
-      setRecords((current) => current.map((row) => row.record_id === record.record_id ? response.data : row));
-      await loadAuditEvents(selectedWorkspaceId);
-      setStatus({ tone: "success", text: "Cell saved" });
-    } catch (error) {
+      }, "PATCH").then((response) => {
+        setRecords((current) => current.map((row) => row.record_id === baseRecord.record_id ? response.data : row));
+        return response.data;
+      });
+    }).catch((error) => {
       setRecords((current) => current.map((row) => row.record_id === record.record_id ? record : row));
       setStatus({ tone: "danger", text: errorMessage(error) });
-    }
+      return null;
+    }).finally(() => {
+      if (saveQueueRef.current.get(record.record_id) === queued) {
+        saveQueueRef.current.delete(record.record_id);
+      }
+    });
+
+    saveQueueRef.current.set(record.record_id, queued);
   }
 
   async function deleteRecord(record: RecordRow) {

@@ -26,7 +26,7 @@ export function useWorkspaceActions(options: WorkspaceActionsOptions) {
   } = options;
 
   async function createWorkspace() {
-    if (!profile?.can_create_workspaces) {
+    if (profile?.role === "member") {
       setStatus({ tone: "danger", text: "You do not have permission to create workspaces" });
       return;
     }

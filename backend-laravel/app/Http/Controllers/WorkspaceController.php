@@ -19,11 +19,21 @@ final class WorkspaceController
 
     public function index(Request $request): JsonResponse
     {
-        $rows = DB::table('app.workspaces as w')->join('app.workspace_members as wm', 'wm.workspace_id', '=', 'w.workspace_id')
-            ->where('wm.user_id', $request->user()->getKey())->whereNull('w.deleted_at')
-            ->orderByDesc('w.updated_at')->orderByDesc('w.workspace_id')
-            ->selectRaw("w.workspace_id, w.name, CASE WHEN wm.permissions IS NOT NULL AND wm.permissions->>'workspace' IS NULL THEN 'restricted' ELSE wm.role::text END AS role, w.created_at, w.updated_at, w.row_version")
-            ->get();
+        $profile = DB::table('app.user_profiles')->where('user_id', $request->user()->getKey())->first();
+        $isAdmin = in_array($profile?->role, ['owner', 'admin'], true);
+
+        if ($isAdmin) {
+            $rows = DB::table('app.workspaces as w')->whereNull('w.deleted_at')
+                ->orderByDesc('w.updated_at')->orderByDesc('w.workspace_id')
+                ->selectRaw("w.workspace_id, w.name, 'admin'::text AS role, w.created_at, w.updated_at, w.row_version")
+                ->get();
+        } else {
+            $rows = DB::table('app.workspaces as w')->join('app.workspace_members as wm', 'wm.workspace_id', '=', 'w.workspace_id')
+                ->where('wm.user_id', $request->user()->getKey())->whereNull('w.deleted_at')
+                ->orderByDesc('w.updated_at')->orderByDesc('w.workspace_id')
+                ->selectRaw("w.workspace_id, w.name, CASE WHEN wm.permissions IS NOT NULL AND wm.permissions->>'workspace' IS NULL THEN 'restricted' ELSE wm.role::text END AS role, w.created_at, w.updated_at, w.row_version")
+                ->get();
+        }
 
         return response()->json(['data' => $rows]);
     }
@@ -31,7 +41,7 @@ final class WorkspaceController
     public function store(NameRequest $request): JsonResponse
     {
         $profile = DB::table('app.user_profiles')->where('user_id', $request->user()->getKey())->first();
-        if (! $profile?->can_create_workspaces || $profile->disabled_at) {
+        if (! in_array($profile?->role, ['owner', 'admin', 'creator'], true) || $profile->disabled_at) {
             throw ApiException::forbidden('You do not have permission to create workspaces');
         }
         $row = $this->metadata->createWorkspace((string) $request->string('name'), $request->user()->getKey());

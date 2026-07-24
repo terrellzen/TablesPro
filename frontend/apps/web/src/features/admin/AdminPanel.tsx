@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Database, History, ShieldCheck, Users, X } from "lucide-react";
 import type {
-  AdminWorkspace, AuditEvent, AuthUser, CreateUserInput, UserProfile, Workspace
+  AdminWorkspace, AuditEvent, AuthUser, CreateUserInput, GlobalRole, UserProfile, Workspace
 } from "../../types/domain.js";
 import { AdminAuditTab } from "./AdminAuditTab.js";
 import { AdminDatabaseTab } from "./AdminDatabaseTab.js";
@@ -20,9 +20,9 @@ export type AdminPanelProps = {
     baseId: string | null,
     tableId: string | null
   ) => Promise<AuditEvent[]>;
-  onChangeUserPermissions: (
+  onChangeUserRole: (
     user: UserProfile,
-    patch: Partial<Pick<UserProfile, "can_create_workspaces" | "can_manage_users">>
+    role: GlobalRole
   ) => Promise<void>;
   onRemoveUser: (user: UserProfile) => Promise<void>;
   onCreateUser: (fields: CreateUserInput) => Promise<UserProfile | undefined>;

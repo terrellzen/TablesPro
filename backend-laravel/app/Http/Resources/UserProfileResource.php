@@ -13,8 +13,7 @@ final class UserProfileResource extends JsonResource
             'user_id' => $this->user_id,
             'handle' => $this->handle,
             'display_name' => $this->display_name,
-            'can_create_workspaces' => (bool) $this->can_create_workspaces,
-            'can_manage_users' => (bool) $this->can_manage_users,
+            'role' => $this->role,
             'disabled_at' => $this->disabled_at,
         ];
     }

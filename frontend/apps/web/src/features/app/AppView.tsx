@@ -94,7 +94,7 @@ export function AppView({ controller }: { controller: AppController }) {
             adminWorkspaces={controller.adminWorkspaces}
             workspaces={workspaces}
             onLoadAdminAuditEvents={controller.loadAdminAuditEvents}
-            onChangeUserPermissions={controller.changeUserPermissions}
+            onChangeUserRole={controller.changeUserRole}
             onRemoveUser={controller.removeUser}
             onCreateUser={controller.createUser}
             onChangeUserPassword={controller.changeUserPassword}

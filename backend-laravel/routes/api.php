@@ -29,7 +29,7 @@ Route::middleware('auth:web')->group(function (): void {
     Route::post('/users', [UserController::class, 'store']);
     Route::put('/me/profile', [UserController::class, 'profile']);
     Route::post('/me/change-password', [UserController::class, 'changePassword']);
-    Route::patch('/users/{userId}/permissions', [UserController::class, 'permissions']);
+    Route::patch('/users/{userId}/role', [UserController::class, 'changeRole']);
     Route::delete('/users/{userId}', [UserController::class, 'destroy']);
     Route::post('/users/{userId}/password', [UserController::class, 'resetPassword']);
 

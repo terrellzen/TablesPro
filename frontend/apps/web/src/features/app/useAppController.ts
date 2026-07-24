@@ -265,7 +265,7 @@ export function useAppController() {
     exportCsv: tableActions.exportCsv,
     saveMemberPermissions: adminActions.saveMemberPermissions,
     removeMember: adminActions.removeMember,
-    changeUserPermissions: adminActions.changeUserPermissions,
+    changeUserRole: adminActions.changeUserRole,
     removeUser: adminActions.removeUser,
     createUser: adminActions.createUser,
     changeMyPassword: sessionActions.changeMyPassword,

@@ -39,7 +39,7 @@ export function WorkspaceSidebar(props: {
         onLogout={props.onLogout}
         onChangePassword={props.onChangePassword}
       />
-      {props.profile?.can_manage_users && (
+      {(props.profile?.role === "owner" || props.profile?.role === "admin") && (
         <button
           type="button"
           className={`command-button admin-command ${props.showAdmin ? "active" : ""}`}
