@@ -15,8 +15,8 @@ final class AdminController
         $this->admin($request);
         $name = DB::selectOne('SELECT current_database() AS name')->name;
         $size = DB::selectOne('SELECT pg_database_size(current_database())::text AS size_bytes')->size_bytes;
-        $count = DB::table('information_schema.tables')->where('table_schema', 'app_data')->count();
-        $tables = DB::select("SELECT stats.relname AS physical_name, tables.name AS table_name, bases.name AS base_name, workspaces.name AS workspace_name, stats.n_live_tup AS count FROM pg_stat_user_tables stats LEFT JOIN app.tables tables ON tables.physical_table_name::text = stats.relname LEFT JOIN app.bases bases ON bases.base_id = tables.base_id LEFT JOIN app.workspaces workspaces ON workspaces.workspace_id = bases.workspace_id WHERE stats.schemaname='app_data' ORDER BY stats.n_live_tup DESC LIMIT 20");
+        $count = DB::table('app.tables as t')->join('app.bases as b', 'b.base_id', '=', 't.base_id')->join('app.workspaces as w', 'w.workspace_id', '=', 'b.workspace_id')->whereNull('w.deleted_at')->count();
+        $tables = DB::select("SELECT stats.relname AS physical_name, tables.name AS table_name, bases.name AS base_name, workspaces.name AS workspace_name, stats.n_live_tup AS count FROM pg_stat_user_tables stats LEFT JOIN app.tables tables ON tables.physical_table_name::text = stats.relname LEFT JOIN app.bases bases ON bases.base_id = tables.base_id LEFT JOIN app.workspaces workspaces ON workspaces.workspace_id = bases.workspace_id WHERE stats.schemaname='app_data' AND workspaces.deleted_at IS NULL ORDER BY stats.n_live_tup DESC");
         return response()->json(['database' => ['name' => $name, 'sizeBytes' => (int) $size, 'tableCount' => $count, 'tables' => collect($tables)->map(fn ($row) => ['physicalName' => $row->physical_name, 'tableName' => $row->table_name ?? $row->physical_name, 'baseName' => $row->base_name, 'workspaceName' => $row->workspace_name, 'rowCount' => (int) $row->count])]]);
     }
 

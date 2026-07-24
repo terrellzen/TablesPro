@@ -12,16 +12,19 @@ type DatabaseStats = {
   };
 };
 
+const PAGE_SIZE = 15;
+
 export function AdminDatabaseTab() {
   const [stats, setStats] = useState<DatabaseStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => {
     setLoading(true);
     setError("");
     api<DatabaseStats>("/api/admin/stats")
-      .then(setStats)
+      .then((data) => { setStats(data); setVisibleCount(PAGE_SIZE); })
       .catch((reason) => setError(errorMessage(reason)))
       .finally(() => setLoading(false));
   }, []);
@@ -73,7 +76,7 @@ export function AdminDatabaseTab() {
               <span>Workspace → Base → Table</span>
               <span>Rows</span>
             </div>
-            {stats.database.tables.map((table) => (
+            {stats.database.tables.slice(0, visibleCount).map((table) => (
               <div className="db-table-row" key={table.physicalName}>
                 <div className="db-table-identity">
                   <div className="db-table-path">
@@ -86,6 +89,15 @@ export function AdminDatabaseTab() {
                 <span>{table.rowCount.toLocaleString()}</span>
               </div>
             ))}
+            {visibleCount < stats.database.tables.length && (
+              <button
+                type="button"
+                className="audit-load-more"
+                onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+              >
+                Load more
+              </button>
+            )}
           </div>
         </div>
       )}
