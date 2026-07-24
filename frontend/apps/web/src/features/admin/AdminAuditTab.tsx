@@ -3,12 +3,12 @@ import { ArrowRight, CirclePlus, History, Pencil, Trash2 } from "lucide-react";
 import { api } from "../../lib/api.js";
 import { auditObject, auditValueForDisplay, errorMessage } from "../../lib/format.js";
 import { onAuditChanged } from "../../lib/auditEvents.js";
-import type { AdminBase, AdminTable, AuditEvent } from "../../types/domain.js";
+import type { AdminBase, AdminTable, AuditEvent, UserProfile } from "../../types/domain.js";
 import type { AdminPanelProps } from "./AdminPanel.js";
 
 type AuditTabProps = Pick<
   AdminPanelProps,
-  "profile" | "adminWorkspaces" | "workspaces" | "onLoadAdminAuditEvents"
+  "profile" | "adminWorkspaces" | "workspaces" | "users" | "onLoadAdminAuditEvents"
 >;
 
 export function AdminAuditTab(props: AuditTabProps) {
@@ -18,6 +18,7 @@ export function AdminAuditTab(props: AuditTabProps) {
   const [workspaceFilter, setWorkspaceFilter] = useState("");
   const [baseFilter, setBaseFilter] = useState("");
   const [tableFilter, setTableFilter] = useState("");
+  const [actorFilter, setActorFilter] = useState("");
   const [adminBases, setAdminBases] = useState<AdminBase[]>([]);
   const [adminTables, setAdminTables] = useState<AdminTable[]>([]);
   const [loading, setLoading] = useState(false);
@@ -39,7 +40,9 @@ export function AdminAuditTab(props: AuditTabProps) {
       scopeFilter,
       workspaceFilter || null,
       baseFilter || null,
-      tableFilter || null
+      tableFilter || null,
+      null,
+      actorFilter || null
     ).then((result) => {
       if (current) { setEvents(result.data); setNextCursor(result.nextCursor); }
     }).catch((error) => {
@@ -48,7 +51,7 @@ export function AdminAuditTab(props: AuditTabProps) {
       if (current) setLoading(false);
     });
     return () => { current = false; };
-  }, [scopeFilter, workspaceFilter, baseFilter, tableFilter, refreshToken]);
+  }, [scopeFilter, workspaceFilter, baseFilter, tableFilter, actorFilter, refreshToken]);
 
   useEffect(() => {
     if (!workspaceFilter || !isAdmin) {
@@ -153,6 +156,17 @@ export function AdminAuditTab(props: AuditTabProps) {
               </select>
             </label>
           )}
+          {props.users.length > 0 && (
+            <label className="audit-filter">
+              Actor
+              <select value={actorFilter} onChange={(event) => setActorFilter(event.target.value)}>
+                <option value="">All</option>
+                {props.users.map((user) => (
+                  <option key={user.user_id} value={user.user_id}>{user.display_name || user.handle || user.user_id}</option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
         {workspaceFilter && <p className="audit-filter-note">Company-level user activity is visible when Workspace is set to All.</p>}
         {loading && <p className="empty-text">Loading...</p>}
@@ -204,7 +218,8 @@ export function AdminAuditTab(props: AuditTabProps) {
                   workspaceFilter || null,
                   baseFilter || null,
                   tableFilter || null,
-                  nextCursor
+                  nextCursor,
+                  actorFilter || null
                 ).then((result) => {
                   setEvents((prev) => [...prev, ...result.data]);
                   setNextCursor(result.nextCursor);

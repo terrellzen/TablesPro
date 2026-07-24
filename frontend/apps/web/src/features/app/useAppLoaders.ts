@@ -108,7 +108,8 @@ export function useAppLoaders(options: AppLoadersOptions) {
     workspaceId: string | null = null,
     baseId: string | null = null,
     tableId: string | null = null,
-    cursor: string | null = null
+    cursor: string | null = null,
+    actorUserId: string | null = null
   ) => {
     const params = new URLSearchParams({ limit: "100" });
     if (scope !== "all") params.set("scope", scope);
@@ -116,6 +117,7 @@ export function useAppLoaders(options: AppLoadersOptions) {
     if (baseId) params.set("baseId", baseId);
     if (tableId) params.set("tableId", tableId);
     if (cursor) params.set("cursor", cursor);
+    if (actorUserId) params.set("actorUserId", actorUserId);
     const response = await api<{ data: AuditEvent[]; page: { nextCursor: string | null } }>(`/api/admin/audit-events?${params.toString()}`);
     return { data: response.data, nextCursor: response.page.nextCursor };
   }, []);

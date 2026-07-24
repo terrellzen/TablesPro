@@ -37,6 +37,14 @@ export function WorkspaceMembersDialog(props: {
     setEditingId(member?.user_id ?? "new");
     setUserId(member?.handle ? `@${member.handle}` : member?.user_id ?? "");
     setPermissions(permissionsForMember(member));
+    if (member) {
+      void api<{ data: WorkspaceMember[] }>(`/api/workspaces/${props.workspace.workspace_id}/members`)
+        .then((response) => {
+          const fresh = response.data.find((m) => m.user_id === member.user_id);
+          if (fresh) setPermissions(permissionsForMember(fresh));
+        })
+        .catch(() => {});
+    }
   }
 
   async function save() {

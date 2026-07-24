@@ -98,7 +98,7 @@ final class UserService
         $targetProfile = $this->profileRow($userId);
         if (! $targetProfile) throw ApiException::notFound('User was not found');
 
-        if (in_array($targetProfile->role, ['owner', 'admin'], true) && ! $actorProfile?->is_owner) {
+        if (in_array($targetProfile->role, ['owner', 'admin'], true) && $actorProfile->role !== 'owner') {
             throw ApiException::forbidden('Only the Owner can disable an Admin or Owner');
         }
 
@@ -115,6 +115,12 @@ final class UserService
         $account = $actor->account;
         if (! $account) throw new ApiException(400, 'VALIDATION_ERROR', 'No password set on your account');
         if (! Hash::check($adminPassword, $account->password)) throw ApiException::forbidden('Your password is incorrect');
+        $actorProfile = $this->profileRow($actor->getKey());
+        $targetProfile = $this->profileRow($userId);
+        if (! $targetProfile) throw ApiException::notFound('User was not found');
+        if (in_array($targetProfile->role, ['owner', 'admin'], true) && $actorProfile->role !== 'owner') {
+            throw ApiException::forbidden('Only the Owner can reset the password of an Admin or Owner');
+        }
         if (! AuthAccount::query()->where('userId', $userId)->where('providerId', 'email')->update(['password' => Hash::make($newPassword), 'updatedAt' => now()])) {
             throw ApiException::notFound('User was not found');
         }

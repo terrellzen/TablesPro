@@ -19,7 +19,8 @@ export type AdminPanelProps = {
     workspaceId: string | null,
     baseId: string | null,
     tableId: string | null,
-    cursor?: string | null
+    cursor?: string | null,
+    actorUserId?: string | null
   ) => Promise<{ data: AuditEvent[]; nextCursor: string | null }>;
   onChangeUserRole: (
     user: UserProfile,
