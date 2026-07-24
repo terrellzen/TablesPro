@@ -49,7 +49,7 @@ final class AdminController
     public function audit(Request $request): JsonResponse
     {
         $this->admin($request);
-        $input = $request->validate(['scope' => ['sometimes', 'in:company,workspace'], 'workspaceId' => ['sometimes', 'uuid'], 'baseId' => ['sometimes', 'uuid'], 'tableId' => ['sometimes', 'uuid'], 'limit' => ['sometimes', 'integer', 'min:1']]);
+        $input = $request->validate(['scope' => ['sometimes', 'in:company,workspace'], 'workspaceId' => ['sometimes', 'uuid'], 'baseId' => ['sometimes', 'uuid'], 'tableId' => ['sometimes', 'uuid'], 'limit' => ['sometimes', 'integer', 'min:1'], 'cursor' => ['sometimes', 'string']]);
         $limit = min((int) ($input['limit'] ?? 100), 250);
         $query = DB::table('app.audit_events as ae')->leftJoin('app.workspaces as w', 'w.workspace_id', '=', 'ae.workspace_id')
             ->leftJoin('app.user_profiles as up', 'up.user_id', '=', 'ae.actor_user_id')
@@ -60,8 +60,15 @@ final class AdminController
         if (isset($input['workspaceId'])) $query->where('ae.workspace_id', $input['workspaceId']);
         if (isset($input['baseId'])) $query->where('t.base_id', $input['baseId']);
         if (isset($input['tableId'])) $query->whereRaw("ae.metadata->>'tableId' = ?", [$input['tableId']]);
-        $rows = $query->orderByDesc('ae.occurred_at')->orderByDesc('ae.event_id')->limit($limit)->get(['ae.*', DB::raw("COALESCE(w.name, ae.metadata->>'workspaceName') AS workspace_name"), 'b.base_id', 'b.name as base_name', 't.table_id', 't.name as table_name', DB::raw('COALESCE(up.display_name, up.handle::text, ae.actor_user_id) AS actor_name'), DB::raw('up.handle::text AS actor_handle')])->map(fn (object $row): object => AuditService::forResponse($row));
-        return response()->json(['data' => $rows, 'page' => ['nextCursor' => null, 'hasMore' => $rows->count() === $limit]]);
+        if (isset($input['cursor'])) {
+            $cursor = json_decode(base64_decode($input['cursor']), true);
+            $query->whereRaw('(ae.occurred_at, ae.event_id) < (?::timestamptz, ?::uuid)', [$cursor['t'], $cursor['e']]);
+        }
+        $rows = $query->orderByDesc('ae.occurred_at')->orderByDesc('ae.event_id')->limit($limit + 1)->get(['ae.*', DB::raw("COALESCE(w.name, ae.metadata->>'workspaceName') AS workspace_name"), 'b.base_id', 'b.name as base_name', 't.table_id', 't.name as table_name', DB::raw('COALESCE(up.display_name, up.handle::text, ae.actor_user_id) AS actor_name'), DB::raw('up.handle::text AS actor_handle')])->map(fn (object $row): object => AuditService::forResponse($row));
+        $hasMore = $rows->count() > $limit;
+        $rows = $rows->take($limit);
+        $nextCursor = $hasMore && $rows->isNotEmpty() ? base64_encode(json_encode(['t' => $rows->last()->occurred_at, 'e' => $rows->last()->event_id])) : null;
+        return response()->json(['data' => $rows, 'page' => ['nextCursor' => $nextCursor, 'hasMore' => $hasMore]]);
     }
 
     private function admin(Request $request): void

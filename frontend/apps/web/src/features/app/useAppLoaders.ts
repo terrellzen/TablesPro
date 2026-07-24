@@ -107,15 +107,17 @@ export function useAppLoaders(options: AppLoadersOptions) {
     scope: "all" | "company" | "workspace" = "all",
     workspaceId: string | null = null,
     baseId: string | null = null,
-    tableId: string | null = null
+    tableId: string | null = null,
+    cursor: string | null = null
   ) => {
     const params = new URLSearchParams({ limit: "100" });
     if (scope !== "all") params.set("scope", scope);
     if (workspaceId) params.set("workspaceId", workspaceId);
     if (baseId) params.set("baseId", baseId);
     if (tableId) params.set("tableId", tableId);
-    const response = await api<{ data: AuditEvent[] }>(`/api/admin/audit-events?${params.toString()}`);
-    return response.data;
+    if (cursor) params.set("cursor", cursor);
+    const response = await api<{ data: AuditEvent[]; page: { nextCursor: string | null } }>(`/api/admin/audit-events?${params.toString()}`);
+    return { data: response.data, nextCursor: response.page.nextCursor };
   }, []);
 
   const loadUsers = useCallback(async () => {

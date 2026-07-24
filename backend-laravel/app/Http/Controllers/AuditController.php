@@ -15,15 +15,23 @@ final class AuditController
     public function index(Request $request, string $workspaceId): JsonResponse
     {
         $this->permissions->workspace($request->user(), $workspaceId, 'audit:read');
-        $limit = min(max($request->integer('limit', 100), 1), 250);
-        $rows = DB::table('app.audit_events as ae')
+        $input = $request->validate(['limit' => ['sometimes', 'integer', 'min:1'], 'cursor' => ['sometimes', 'string']]);
+        $limit = min(max((int) ($input['limit'] ?? 100), 1), 250);
+        $query = DB::table('app.audit_events as ae')
             ->join('app.workspaces as w', 'w.workspace_id', '=', 'ae.workspace_id')
             ->leftJoin('app.user_profiles as up', 'up.user_id', '=', 'ae.actor_user_id')
             ->leftJoin('app.tables as t', DB::raw("t.table_id"), '=', DB::raw("COALESCE(NULLIF(ae.metadata->>'tableId', '')::uuid, CASE WHEN ae.entity_type = 'table' THEN ae.entity_id::uuid END)"))
             ->leftJoin('app.bases as b', DB::raw("b.base_id"), '=', DB::raw("COALESCE(t.base_id, CASE WHEN ae.entity_type = 'base' THEN ae.entity_id::uuid END)"))
-            ->where('ae.workspace_id', $workspaceId)
-            ->orderByDesc('ae.occurred_at')->orderByDesc('ae.event_id')->limit($limit)
+            ->where('ae.workspace_id', $workspaceId);
+        if (isset($input['cursor'])) {
+            $cursor = json_decode(base64_decode($input['cursor']), true);
+            $query->whereRaw('(ae.occurred_at, ae.event_id) < (?::timestamptz, ?::uuid)', [$cursor['t'], $cursor['e']]);
+        }
+        $rows = $query->orderByDesc('ae.occurred_at')->orderByDesc('ae.event_id')->limit($limit + 1)
             ->get(['ae.*', 'w.name as workspace_name', 'b.base_id', 'b.name as base_name', 't.table_id', 't.name as table_name', DB::raw('COALESCE(up.display_name, up.handle::text, ae.actor_user_id) AS actor_name'), DB::raw('up.handle::text AS actor_handle')])->map(fn (object $row): object => AuditService::forResponse($row));
-        return response()->json(['data' => $rows, 'page' => ['nextCursor' => null, 'previousCursor' => null, 'hasMore' => $rows->count() === $limit, 'requestedLimit' => $limit]]);
+        $hasMore = $rows->count() > $limit;
+        $rows = $rows->take($limit);
+        $nextCursor = $hasMore && $rows->isNotEmpty() ? base64_encode(json_encode(['t' => $rows->last()->occurred_at, 'e' => $rows->last()->event_id])) : null;
+        return response()->json(['data' => $rows, 'page' => ['nextCursor' => $nextCursor, 'previousCursor' => null, 'hasMore' => $hasMore, 'requestedLimit' => $limit]]);
     }
 }

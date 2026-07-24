@@ -21,7 +21,9 @@ export function AdminAuditTab(props: AuditTabProps) {
   const [adminBases, setAdminBases] = useState<AdminBase[]>([]);
   const [adminTables, setAdminTables] = useState<AdminTable[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadMoreLoading, setLoadMoreLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const isAdmin = props.profile?.role === "owner" || props.profile?.role === "admin";
   const workspaces = isAdmin ? props.adminWorkspaces : props.workspaces;
   useEffect(() => onAuditChanged(() => setRefreshToken((current) => current + 1)), []);
@@ -30,6 +32,7 @@ export function AdminAuditTab(props: AuditTabProps) {
   useEffect(() => {
     let current = true;
     setEvents([]);
+    setNextCursor(null);
     setLoading(true);
     setLoadError("");
     void props.onLoadAdminAuditEvents(
@@ -38,7 +41,7 @@ export function AdminAuditTab(props: AuditTabProps) {
       baseFilter || null,
       tableFilter || null
     ).then((result) => {
-      if (current) setEvents(result);
+      if (current) { setEvents(result.data); setNextCursor(result.nextCursor); }
     }).catch((error) => {
       if (current) setLoadError(errorMessage(error));
     }).finally(() => {
@@ -187,6 +190,34 @@ export function AdminAuditTab(props: AuditTabProps) {
             );
           })}
           {events.length === 0 && !loading && <p className="empty-text">No audit events yet.</p>}
+          {nextCursor && (
+            <button
+              type="button"
+              className="audit-load-more"
+              disabled={loadMoreLoading}
+              onClick={() => {
+                if (!nextCursor) return;
+                setLoadMoreLoading(true);
+                setLoadError("");
+                void props.onLoadAdminAuditEvents(
+                  scopeFilter,
+                  workspaceFilter || null,
+                  baseFilter || null,
+                  tableFilter || null,
+                  nextCursor
+                ).then((result) => {
+                  setEvents((prev) => [...prev, ...result.data]);
+                  setNextCursor(result.nextCursor);
+                }).catch((error) => {
+                  setLoadError(errorMessage(error));
+                }).finally(() => {
+                  setLoadMoreLoading(false);
+                });
+              }}
+            >
+              {loadMoreLoading ? "Loading..." : "Load more"}
+            </button>
+          )}
         </div>
       </div>
     </div>

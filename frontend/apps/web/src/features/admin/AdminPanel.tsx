@@ -18,8 +18,9 @@ export type AdminPanelProps = {
     scope: "all" | "company" | "workspace",
     workspaceId: string | null,
     baseId: string | null,
-    tableId: string | null
-  ) => Promise<AuditEvent[]>;
+    tableId: string | null,
+    cursor?: string | null
+  ) => Promise<{ data: AuditEvent[]; nextCursor: string | null }>;
   onChangeUserRole: (
     user: UserProfile,
     role: GlobalRole
